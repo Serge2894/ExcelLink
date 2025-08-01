@@ -118,6 +118,16 @@ namespace ExcelLink
                 titleRange.Font.Bold = true;
                 titleRange.Font.Size = 14;
 
+                // Add thick border around title
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeLeft].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeTop].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeBottom].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeRight].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
+
                 // Write legend headers
                 ((Excel.Range)colorLegendSheet.Cells[3, 2]).Value2 = "Color";
                 ((Excel.Range)colorLegendSheet.Cells[3, 3]).Value2 = "Description";
@@ -151,6 +161,17 @@ namespace ExcelLink
                 Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[6, 4]];
                 dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                 dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
+
+                // Apply thick outside border to the entire table
+                Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 4]];
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
 
                 // Set column widths
                 ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
@@ -298,10 +319,10 @@ namespace ExcelLink
                     int row = 2;
                     foreach (Element element in elements)
                     {
-                        // Write Element ID and color it red (#FF4747) for Read-only
+                        // Write Element ID and color it grey (#D3D3D3) for Read-only
                         Excel.Range idCell = (Excel.Range)worksheet.Cells[row, 1];
                         idCell.Value2 = element.Id.IntegerValue.ToString();
-                        idCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                        idCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
                         idCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                         idCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
@@ -366,14 +387,20 @@ namespace ExcelLink
                             if (param != null)
                             {
                                 dataCell.Value2 = value;
-                                if (isTypeParam)
+                                if (param.IsReadOnly)
                                 {
+                                    // Read-only parameters get red color
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                                }
+                                else if (isTypeParam)
+                                {
+                                    // Type parameters get light yellow color
                                     dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
                                 }
                             }
                             else
                             {
-                                // If parameter does not exist, color the cell white (#D3D3D3)
+                                // If parameter does not exist, color the cell grey (#D3D3D3)
                                 dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
                             }
 
