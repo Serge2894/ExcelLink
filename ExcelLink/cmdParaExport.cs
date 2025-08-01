@@ -110,36 +110,56 @@ namespace ExcelLink
                 Excel.Worksheet colorLegendSheet = (Excel.Worksheet)workbook.Worksheets[1];
                 colorLegendSheet.Name = "Color Legend";
 
+                // Merge and center title
+                Excel.Range titleRange = colorLegendSheet.Range[colorLegendSheet.Cells[1, 2], colorLegendSheet.Cells[1, 4]];
+                titleRange.Merge();
+                titleRange.Value2 = "Color Legend";
+                titleRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+                titleRange.Font.Bold = true;
+                titleRange.Font.Size = 14;
+
                 // Write legend headers
-                ((Excel.Range)colorLegendSheet.Cells[1, 2]).Value2 = "Color Legend";
                 ((Excel.Range)colorLegendSheet.Cells[3, 2]).Value2 = "Color";
                 ((Excel.Range)colorLegendSheet.Cells[3, 3]).Value2 = "Description";
                 ((Excel.Range)colorLegendSheet.Cells[3, 4]).Value2 = "Notes";
 
-                // Write legend content
-                Excel.Range lightGrayCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
-                lightGrayCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
-                lightGrayCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                // Format headers
+                Excel.Range legendHeaderRange = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[3, 4]];
+                legendHeaderRange.Font.Bold = true;
+                legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+
+                // Write legend content - Row 4: White (#D3D3D3)
+                Excel.Range whiteCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
+                whiteCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
                 ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Parameter does not exist for this element";
                 ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Do not fill or edit cell";
 
-                Excel.Range paleGoldenrodCell = (Excel.Range)colorLegendSheet.Cells[5, 2];
-                paleGoldenrodCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.PaleGoldenrod);
-                paleGoldenrodCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                // Row 5: Light Yellow (#FFE699)
+                Excel.Range lightYellowCell = (Excel.Range)colorLegendSheet.Cells[5, 2];
+                lightYellowCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
                 ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Type value";
                 ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Type parameters with the same ID should be filled the same";
 
-                Excel.Range yellowCell = (Excel.Range)colorLegendSheet.Cells[6, 2];
-                yellowCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.Yellow);
-                yellowCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                // Row 6: Red (#FF4747)
+                Excel.Range redCell = (Excel.Range)colorLegendSheet.Cells[6, 2];
+                redCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
                 ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Read-only value";
                 ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Uneditable cell";
 
-                // Format legend headers
-                Excel.Range legendHeaderRange = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[3, 4]];
-                legendHeaderRange.Font.Bold = true;
+                // Apply borders to all data cells
+                Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[6, 4]];
+                dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-                colorLegendSheet.Columns.AutoFit();
+                // Set column widths
+                ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
+                ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 40;
+                ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
+
+                // Center align the color column
+                Excel.Range colorColumn = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 2]];
+                colorColumn.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
 
                 int sheetIndex = 2; // Start with the second sheet for categories
 
@@ -184,34 +204,66 @@ namespace ExcelLink
                     worksheet.Name = sheetName;
 
                     // Write headers with multi-line text
-                    ((Excel.Range)worksheet.Cells[1, 1]).Value2 = "Element ID";
+                    Excel.Range elementIdHeader = (Excel.Range)worksheet.Cells[1, 1];
+                    elementIdHeader.Value2 = "Element ID";
+                    elementIdHeader.ColumnWidth = 12;
+
                     for (int i = 0; i < selectedParameters.Count; i++)
                     {
                         string paramName = selectedParameters[i];
                         string paramType = "N/A";
                         string paramStorageType = "N/A";
 
+                        // First check instance parameter
                         Parameter param = elements.First().LookupParameter(paramName);
+                        bool isTypeParam = false;
+
+                        if (param != null)
+                        {
+                            paramType = "Instance Parameter";
+                        }
+                        else
+                        {
+                            // Check type parameter
+                            Element typeElem = doc.GetElement(elements.First().GetTypeId());
+                            if (typeElem != null)
+                            {
+                                param = typeElem.LookupParameter(paramName);
+                                if (param != null)
+                                {
+                                    paramType = "Type Parameter";
+                                    isTypeParam = true;
+                                }
+                            }
+                        }
+
+                        // If still not found, check for built-in parameters
                         if (param == null)
                         {
-                            Element typeElem = doc.GetElement(elements.First().GetTypeId());
-                            param = typeElem?.LookupParameter(paramName);
-                            if (param != null)
+                            // Check built-in instance parameters
+                            BuiltInParameter bip = GetBuiltInParameterByName(paramName);
+                            if (bip != BuiltInParameter.INVALID)
                             {
-                                paramType = "Type Parameter";
-                            }
-                            else
-                            {
-                                param = elements.First().get_Parameter(GetBuiltInParameterByName(paramName));
+                                param = elements.First().get_Parameter(bip);
                                 if (param != null)
                                 {
                                     paramType = "Instance Parameter";
                                 }
+                                else
+                                {
+                                    // Check if it's a built-in type parameter
+                                    Element typeElem = doc.GetElement(elements.First().GetTypeId());
+                                    if (typeElem != null)
+                                    {
+                                        param = typeElem.get_Parameter(bip);
+                                        if (param != null)
+                                        {
+                                            paramType = "Type Parameter";
+                                            isTypeParam = true;
+                                        }
+                                    }
+                                }
                             }
-                        }
-                        else
-                        {
-                            paramType = "Instance Parameter";
                         }
 
                         if (param != null)
@@ -220,26 +272,38 @@ namespace ExcelLink
                         }
 
                         string headerText = $"{paramName}{Environment.NewLine}({paramType}){Environment.NewLine}Type: {paramStorageType}";
-                        ((Excel.Range)worksheet.Cells[1, i + 2]).Value2 = headerText;
+                        Excel.Range headerCell = (Excel.Range)worksheet.Cells[1, i + 2];
+                        headerCell.Value2 = headerText;
+
+                        // Set column width based on parameter name length, but with reasonable limits
+                        int columnWidth = Math.Max(15, Math.Min(30, paramName.Length + 5));
+                        headerCell.ColumnWidth = columnWidth;
                     }
 
                     // Format headers
                     Excel.Range headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, selectedParameters.Count + 1]];
                     headerRange.Font.Bold = true;
-                    headerRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                    headerRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
                     headerRange.WrapText = true;
                     headerRange.VerticalAlignment = Excel.XlVAlign.xlVAlignTop;
-                    ((Excel.Range)worksheet.Rows[1]).AutoFit();
+                    headerRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+                    headerRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                    headerRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
+
+                    // Set row height to accommodate 3 lines of text
+                    ((Excel.Range)worksheet.Rows[1]).RowHeight = 45;
 
 
                     // Write element data
                     int row = 2;
                     foreach (Element element in elements)
                     {
-                        // Write Element ID and color it yellow for Read-only
+                        // Write Element ID and color it red (#FF4747) for Read-only
                         Excel.Range idCell = (Excel.Range)worksheet.Cells[row, 1];
                         idCell.Value2 = element.Id.IntegerValue.ToString();
-                        idCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.Yellow);
+                        idCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                        idCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                        idCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
                         // Write parameter values
                         for (int col = 0; col < selectedParameters.Count; col++)
@@ -271,26 +335,57 @@ namespace ExcelLink
                                 }
                             }
 
+                            // If still not found, check built-in parameters
+                            if (param == null)
+                            {
+                                BuiltInParameter bip = GetBuiltInParameterByName(paramName);
+                                if (bip != BuiltInParameter.INVALID)
+                                {
+                                    param = element.get_Parameter(bip);
+                                    if (param != null)
+                                    {
+                                        value = GetParameterValue(element, paramName);
+                                    }
+                                    else
+                                    {
+                                        // Check if it's a built-in type parameter
+                                        Element typeElem = doc.GetElement(element.GetTypeId());
+                                        if (typeElem != null)
+                                        {
+                                            param = typeElem.get_Parameter(bip);
+                                            if (param != null)
+                                            {
+                                                value = GetParameterValue(typeElem, paramName);
+                                                isTypeParam = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             if (param != null)
                             {
                                 dataCell.Value2 = value;
                                 if (isTypeParam)
                                 {
-                                    dataCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.PaleGoldenrod);
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
                                 }
                             }
                             else
                             {
-                                // If parameter does not exist, color the cell grey
-                                dataCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                                // If parameter does not exist, color the cell white (#D3D3D3)
+                                dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
                             }
+
+                            // Add borders to all data cells
+                            dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                            dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
                         }
 
                         row++;
                     }
 
-                    // Auto-fit columns
-                    worksheet.Columns.AutoFit();
+                    // Remove the auto-fit columns at the end since we set column widths manually
 
                     sheetIndex++;
                 }
@@ -455,11 +550,54 @@ namespace ExcelLink
 
         private BuiltInParameter GetBuiltInParameterByName(string paramName)
         {
+            // Direct enum parsing
             if (Enum.TryParse(paramName, out BuiltInParameter bip))
             {
                 return bip;
             }
-            return BuiltInParameter.INVALID;
+
+            // Common parameter name mappings
+            switch (paramName)
+            {
+                case "Type Comments":
+                    return BuiltInParameter.ALL_MODEL_TYPE_COMMENTS;
+                case "Comments":
+                    return BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS;
+                case "Mark":
+                    return BuiltInParameter.ALL_MODEL_MARK;
+                case "Type Mark":
+                    return BuiltInParameter.ALL_MODEL_TYPE_MARK;
+                case "Description":
+                    return BuiltInParameter.ALL_MODEL_DESCRIPTION;
+                case "URL":
+                    return BuiltInParameter.ALL_MODEL_URL;
+                case "Type Name":
+                    return BuiltInParameter.SYMBOL_NAME_PARAM;
+                case "Manufacturer":
+                    return BuiltInParameter.ALL_MODEL_MANUFACTURER;
+                case "Model":
+                    return BuiltInParameter.ALL_MODEL_MODEL;
+                case "Cost":
+                    return BuiltInParameter.ALL_MODEL_COST;
+                case "Image":
+                    return BuiltInParameter.ALL_MODEL_IMAGE;
+                case "Type Image":
+                    return BuiltInParameter.ALL_MODEL_TYPE_IMAGE;
+                case "Assembly Code":
+                    return BuiltInParameter.UNIFORMAT_CODE;
+                case "Assembly Description":
+                    return BuiltInParameter.UNIFORMAT_DESCRIPTION;
+                case "Keynote":
+                    return BuiltInParameter.KEYNOTE_PARAM;
+                case "OmniClass Number":
+                    return BuiltInParameter.OMNICLASS_CODE;
+                case "OmniClass Title":
+                    return BuiltInParameter.OMNICLASS_DESCRIPTION;
+                case "Code Name":
+                    return BuiltInParameter.DOOR_NUMBER;
+                default:
+                    return BuiltInParameter.INVALID;
+            }
         }
 
         private Category GetCategoryByName(Document doc, string categoryName)
@@ -490,6 +628,30 @@ namespace ExcelLink
                     if (elementType != null)
                     {
                         param = elementType.LookupParameter(parameterName);
+                    }
+                }
+            }
+
+            // If still not found, try built-in parameters
+            if (param == null)
+            {
+                BuiltInParameter bip = GetBuiltInParameterByName(parameterName);
+                if (bip != BuiltInParameter.INVALID)
+                {
+                    param = element.get_Parameter(bip);
+
+                    // If not found on instance, try on type
+                    if (param == null)
+                    {
+                        ElementId typeId = element.GetTypeId();
+                        if (typeId != ElementId.InvalidElementId)
+                        {
+                            Element elementType = element.Document.GetElement(typeId);
+                            if (elementType != null)
+                            {
+                                param = elementType.get_Parameter(bip);
+                            }
+                        }
                     }
                 }
             }
