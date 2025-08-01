@@ -3,14 +3,13 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using ExcelLink.Forms;
 using ExcelLink.Common;
-using ExcelLink.Properties;
-using FilterTreeControlWPF;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Excel = Microsoft.Office.Interop.Excel;
 using Forms = System.Windows.Forms;
+using System.Drawing;
 
 namespace ExcelLink
 {
@@ -40,12 +39,15 @@ namespace ExcelLink
                 List<string> selectedParameters = form.SelectedParameterNames;
                 bool isEntireModel = form.IsEntireModelChecked;
 
+                // Get the button that was clicked to trigger the dialog result
+                bool isExportClicked = (bool)form.btnExport.Tag;
+
                 // Check if user clicked Export or Import
-                if (form.btnExport.IsDefault) // Export was clicked
+                if (isExportClicked)
                 {
                     return ExportToExcel(doc, selectedCategories, selectedParameters, isEntireModel);
                 }
-                else // Import was clicked
+                else
                 {
                     return ImportFromExcel(doc, selectedCategories, selectedParameters, isEntireModel);
                 }
@@ -75,8 +77,15 @@ namespace ExcelLink
             // Prompt user to save Excel file
             SaveFileDialog saveDialog = new SaveFileDialog();
             saveDialog.Filter = "Excel files|*.xlsx";
-            saveDialog.Title = "Save Excel File";
-            saveDialog.FileName = "RevitParameterExport.xlsx";
+            saveDialog.Title = "Save Revit Parameters to Excel";
+
+            // Set the default file name to the Revit project title
+            string defaultFileName = doc.Title;
+            if (string.IsNullOrEmpty(defaultFileName))
+            {
+                defaultFileName = "RevitParameterExport";
+            }
+            saveDialog.FileName = defaultFileName + ".xlsx";
 
             if (saveDialog.ShowDialog() != DialogResult.OK)
             {
@@ -97,7 +106,42 @@ namespace ExcelLink
                     ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
                 }
 
-                int sheetIndex = 1;
+                // Create the Color Legend Sheet first
+                Excel.Worksheet colorLegendSheet = (Excel.Worksheet)workbook.Worksheets[1];
+                colorLegendSheet.Name = "Color Legend";
+
+                // Write legend headers
+                ((Excel.Range)colorLegendSheet.Cells[1, 2]).Value2 = "Color Legend";
+                ((Excel.Range)colorLegendSheet.Cells[3, 2]).Value2 = "Color";
+                ((Excel.Range)colorLegendSheet.Cells[3, 3]).Value2 = "Description";
+                ((Excel.Range)colorLegendSheet.Cells[3, 4]).Value2 = "Notes";
+
+                // Write legend content
+                Excel.Range lightGrayCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
+                lightGrayCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                lightGrayCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Parameter does not exist for this element";
+                ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Do not fill or edit cell";
+
+                Excel.Range paleGoldenrodCell = (Excel.Range)colorLegendSheet.Cells[5, 2];
+                paleGoldenrodCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.PaleGoldenrod);
+                paleGoldenrodCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Type value";
+                ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Type parameters with the same ID should be filled the same";
+
+                Excel.Range yellowCell = (Excel.Range)colorLegendSheet.Cells[6, 2];
+                yellowCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.Yellow);
+                yellowCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Read-only value";
+                ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Uneditable cell";
+
+                // Format legend headers
+                Excel.Range legendHeaderRange = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[3, 4]];
+                legendHeaderRange.Font.Bold = true;
+
+                colorLegendSheet.Columns.AutoFit();
+
+                int sheetIndex = 2; // Start with the second sheet for categories
 
                 // Process each category
                 foreach (string categoryName in selectedCategories)
@@ -139,31 +183,107 @@ namespace ExcelLink
                     string sheetName = categoryName.Length > 31 ? categoryName.Substring(0, 31) : categoryName;
                     worksheet.Name = sheetName;
 
-                    // Write headers
-                    worksheet.Cells[1, 1] = "Element ID";
+                    // Write headers with multi-line text
+                    ((Excel.Range)worksheet.Cells[1, 1]).Value2 = "Element ID";
                     for (int i = 0; i < selectedParameters.Count; i++)
                     {
-                        worksheet.Cells[1, i + 2] = selectedParameters[i];
+                        string paramName = selectedParameters[i];
+                        string paramType = "N/A";
+                        string paramStorageType = "N/A";
+
+                        Parameter param = elements.First().LookupParameter(paramName);
+                        if (param == null)
+                        {
+                            Element typeElem = doc.GetElement(elements.First().GetTypeId());
+                            param = typeElem?.LookupParameter(paramName);
+                            if (param != null)
+                            {
+                                paramType = "Type Parameter";
+                            }
+                            else
+                            {
+                                param = elements.First().get_Parameter(GetBuiltInParameterByName(paramName));
+                                if (param != null)
+                                {
+                                    paramType = "Instance Parameter";
+                                }
+                            }
+                        }
+                        else
+                        {
+                            paramType = "Instance Parameter";
+                        }
+
+                        if (param != null)
+                        {
+                            paramStorageType = GetParameterStorageTypeString(param.StorageType);
+                        }
+
+                        string headerText = $"{paramName}{Environment.NewLine}({paramType}){Environment.NewLine}Type: {paramStorageType}";
+                        ((Excel.Range)worksheet.Cells[1, i + 2]).Value2 = headerText;
                     }
 
                     // Format headers
                     Excel.Range headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, selectedParameters.Count + 1]];
                     headerRange.Font.Bold = true;
-                    headerRange.Interior.Color = System.Drawing.ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                    headerRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                    headerRange.WrapText = true;
+                    headerRange.VerticalAlignment = Excel.XlVAlign.xlVAlignTop;
+                    ((Excel.Range)worksheet.Rows[1]).AutoFit();
+
 
                     // Write element data
                     int row = 2;
                     foreach (Element element in elements)
                     {
-                        // Write Element ID
-                        worksheet.Cells[row, 1] = element.Id.IntegerValue.ToString();
+                        // Write Element ID and color it yellow for Read-only
+                        Excel.Range idCell = (Excel.Range)worksheet.Cells[row, 1];
+                        idCell.Value2 = element.Id.IntegerValue.ToString();
+                        idCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.Yellow);
 
                         // Write parameter values
                         for (int col = 0; col < selectedParameters.Count; col++)
                         {
                             string paramName = selectedParameters[col];
-                            string value = GetParameterValue(element, paramName);
-                            worksheet.Cells[row, col + 2] = value;
+                            Excel.Range dataCell = (Excel.Range)worksheet.Cells[row, col + 2];
+
+                            Parameter param = element.LookupParameter(paramName);
+                            string value = string.Empty;
+                            bool isTypeParam = false;
+
+                            // Check if the parameter exists as an instance parameter
+                            if (param != null)
+                            {
+                                value = GetParameterValue(element, paramName);
+                            }
+                            else
+                            {
+                                // Check if the parameter exists as a type parameter
+                                Element typeElem = doc.GetElement(element.GetTypeId());
+                                if (typeElem != null)
+                                {
+                                    param = typeElem.LookupParameter(paramName);
+                                    if (param != null)
+                                    {
+                                        value = GetParameterValue(typeElem, paramName);
+                                        isTypeParam = true;
+                                    }
+                                }
+                            }
+
+                            if (param != null)
+                            {
+                                dataCell.Value2 = value;
+                                if (isTypeParam)
+                                {
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.PaleGoldenrod);
+                                }
+                            }
+                            else
+                            {
+                                // If parameter does not exist, color the cell grey
+                                dataCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                            }
                         }
 
                         row++;
@@ -175,16 +295,15 @@ namespace ExcelLink
                     sheetIndex++;
                 }
 
-                // Save and close Excel
+                // Save the file
                 workbook.SaveAs(excelFile);
-                workbook.Close();
-                excel.Quit();
 
-                // Release COM objects
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
+                // Activate the Color Legend sheet
+                ((Excel.Worksheet)workbook.Worksheets["Color Legend"]).Activate();
 
-                TaskDialog.Show("Success", $"Parameters exported successfully to:\n{excelFile}");
+                // Open the file and keep Excel visible
+                excel.Visible = true;
+
                 return Result.Succeeded;
             }
             catch (Exception ex)
@@ -192,7 +311,7 @@ namespace ExcelLink
                 // Clean up Excel if error occurs
                 try
                 {
-                    workbook.Close(false);
+                    if (workbook != null) workbook.Close(false);
                     excel.Quit();
                 }
                 catch { }
@@ -315,6 +434,32 @@ namespace ExcelLink
                 TaskDialog.Show("Error", $"Failed to import parameters:\n{ex.Message}");
                 return Result.Failed;
             }
+        }
+
+        private string GetParameterStorageTypeString(StorageType storageType)
+        {
+            switch (storageType)
+            {
+                case StorageType.Integer:
+                    return "Integer";
+                case StorageType.Double:
+                    return "Decimal";
+                case StorageType.String:
+                    return "Text";
+                case StorageType.ElementId:
+                    return "Element ID";
+                default:
+                    return "Other";
+            }
+        }
+
+        private BuiltInParameter GetBuiltInParameterByName(string paramName)
+        {
+            if (Enum.TryParse(paramName, out BuiltInParameter bip))
+            {
+                return bip;
+            }
+            return BuiltInParameter.INVALID;
         }
 
         private Category GetCategoryByName(Document doc, string categoryName)

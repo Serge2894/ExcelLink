@@ -116,12 +116,14 @@ namespace ExcelLink.Forms
 
         private void btnExport_Click(object sender, RoutedEventArgs e)
         {
+            btnExport.Tag = true;
             DialogResult = true;
             Close();
         }
 
         private void btnImport_Click(object sender, RoutedEventArgs e)
         {
+            btnExport.Tag = false;
             DialogResult = true;
             Close();
         }
@@ -200,7 +202,6 @@ namespace ExcelLink.Forms
                 "Project Base Point",
                 "Primary Contours",
                 "Material Assets",
-                "Materials",
                 "Legend Components",
                 "Internal Origin",
                 "Cameras",
@@ -208,7 +209,8 @@ namespace ExcelLink.Forms
                 "HVAC Zones",
                 "Pipe Segments",
                 "Area Based Load Type",
-                "Circuit Naming Scheme"
+                "Circuit Naming Scheme",
+                "<Sketch>" // Excludes the "<Sketch>" category
             };
 
             // Filter to only include model categories
@@ -352,7 +354,11 @@ namespace ExcelLink.Forms
 
             // Filter and deduplicate parameters
             var distinctParameters = allParameters
-                .Where(p => !p.IsReadOnly && !excludedParameters.Contains(p.Definition.Name))
+                .Where(p => !p.IsReadOnly &&
+                           !excludedParameters.Contains(p.Definition.Name) &&
+                           (p.StorageType == StorageType.String ||
+                            p.StorageType == StorageType.Double ||
+                            p.StorageType == StorageType.Integer))
                 .GroupBy(x => x.Definition.Name)
                 .Select(x => x.First())
                 .OrderBy(x => x.Definition.Name)
