@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Text>ExcelLink - cmdParaExport</Text>
+    <Description>Some description</Description>
+    <Assembly>ExcelLink\ExcelLink.dll</Assembly>
+    <FullClassName>ExcelLink.cmdParaExport</FullClassName>
+    <ClientId>19fede91-ba3d-4384-917b-46064b4ee88d</ClientId>
+    <VendorId>com.YOUR COMPANY NAME</VendorId>
+    <VendorDescription>YOUR COMPANY NAME, YOUR COMPANY URL</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Text>ExcelLink - Command 2</Text>
+    <Description>Some description</Description>
+    <Assembly>ExcelLink\ExcelLink.dll</Assembly>
+    <FullClassName>ExcelLink.Command2</FullClassName>
+    <ClientId>987f3af9-37da-49b6-91bd-d77e19843cb0</ClientId>
+    <VendorId>com.YOUR COMPANY NAME</VendorId>
+    <VendorDescription>YOUR COMPANY NAME, YOUR COMPANY URL</VendorDescription>
+  </AddIn>
+  <AddIn Type="Application">
+    <Name>ExcelLink</Name>
+    <Assembly>ExcelLink\ExcelLink.dll</Assembly>
+    <FullClassName>ExcelLink.App</FullClassName>
+    <ClientId>8950b150-a3dd-4abd-997f-93f412754bb1</ClientId>
+    <VendorId>com.YOUR COMPANY NAME</VendorId>
+    <VendorDescription>YOUR COMPANY NAME, YOUR COMPANY URL</VendorDescription>
+  </AddIn>
+</RevitAddIns>
