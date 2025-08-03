@@ -10,6 +10,7 @@ using System.Reflection;
 using Excel = Microsoft.Office.Interop.Excel;
 using Forms = System.Windows.Forms;
 using System.Drawing;
+using System.Text;
 
 namespace ExcelLink
 {
@@ -139,9 +140,9 @@ namespace ExcelLink
                 legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
                 legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-                // Write legend content - Row 4: White (#D3D3D3)
-                Excel.Range whiteCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
-                whiteCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+                // Write legend content - Row 4: Grey (#D3D3D3)
+                Excel.Range greyCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
+                greyCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
                 ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Parameter does not exist for this element";
                 ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Do not fill or edit cell";
 
@@ -183,7 +184,6 @@ namespace ExcelLink
                 colorColumn.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
 
                 int sheetIndex = 2; // Start with the second sheet for categories
-
                 // Process each category
                 foreach (string categoryName in selectedCategories)
                 {
@@ -387,9 +387,15 @@ namespace ExcelLink
                             if (param != null)
                             {
                                 dataCell.Value2 = value;
-                                if (param.IsReadOnly)
+                                // Special handling for Family and Family and Type - they should always be red
+                                if (paramName == "Family" || paramName == "Family and Type")
                                 {
-                                    // Read-only parameters get red color
+                                    // These are always read-only, color them red
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                                }
+                                else if (param.IsReadOnly)
+                                {
+                                    // Other read-only parameters get red color
                                     dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
                                 }
                                 else if (isTypeParam)
@@ -397,6 +403,8 @@ namespace ExcelLink
                                     // Type parameters get light yellow color
                                     dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
                                 }
+                                // If the parameter is editable but no color assigned, leave it white (no color)
+                                // Note: Workset is an editable instance parameter, so it will be white
                             }
                             else
                             {
@@ -411,8 +419,6 @@ namespace ExcelLink
 
                         row++;
                     }
-
-                    // Remove the auto-fit columns at the end since we set column widths manually
 
                     sheetIndex++;
                 }
@@ -442,7 +448,6 @@ namespace ExcelLink
                 return Result.Failed;
             }
         }
-
         private Result ImportFromExcel(Document doc, List<string> selectedCategories, List<string> selectedParameters, bool isEntireModel)
         {
             // Prompt user to select Excel file
@@ -465,16 +470,24 @@ namespace ExcelLink
             {
                 workbook = excel.Workbooks.Open(excelFile);
 
+                // Dictionary to store errors
+                Dictionary<string, List<string>> importErrors = new Dictionary<string, List<string>>();
+
                 using (Transaction trans = new Transaction(doc, "Import Parameters from Excel"))
                 {
                     trans.Start();
 
                     int totalUpdated = 0;
+                    int totalSkipped = 0;
 
                     // Process each worksheet
                     foreach (Excel.Worksheet worksheet in workbook.Worksheets)
                     {
                         string categoryName = worksheet.Name;
+
+                        // Skip Color Legend sheet
+                        if (categoryName == "Color Legend")
+                            continue;
 
                         // Check if this category was selected
                         if (!selectedCategories.Contains(categoryName))
@@ -489,12 +502,30 @@ namespace ExcelLink
 
                         if (rowCount < 2) continue; // Skip if no data rows
 
-                        // Read headers
-                        List<string> headers = new List<string>();
+                        // Read headers - extract parameter names from multi-line headers
+                        List<string> parameterNames = new List<string>();
                         for (int col = 1; col <= colCount; col++)
                         {
                             object headerValue = ((Excel.Range)worksheet.Cells[1, col]).Value2;
-                            headers.Add(headerValue?.ToString() ?? "");
+                            string headerText = headerValue?.ToString() ?? "";
+
+                            if (col == 1)
+                            {
+                                parameterNames.Add("Element ID");
+                            }
+                            else
+                            {
+                                // Extract parameter name from multi-line header
+                                string[] lines = headerText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                                if (lines.Length > 0)
+                                {
+                                    parameterNames.Add(lines[0]); // First line is the parameter name
+                                }
+                                else
+                                {
+                                    parameterNames.Add("");
+                                }
+                            }
                         }
 
                         // Process data rows
@@ -515,14 +546,45 @@ namespace ExcelLink
                             // Update parameters
                             for (int col = 2; col <= colCount; col++)
                             {
-                                string paramName = headers[col - 1];
-                                if (!selectedParameters.Contains(paramName)) continue;
+                                string paramName = parameterNames[col - 1];
+                                if (string.IsNullOrEmpty(paramName) || !selectedParameters.Contains(paramName))
+                                    continue;
 
-                                object cellValue = ((Excel.Range)worksheet.Cells[row, col]).Value2;
-                                if (cellValue != null)
+                                // Get cell and its color
+                                Excel.Range cell = (Excel.Range)worksheet.Cells[row, col];
+                                object cellValue = cell.Value2;
+                                double cellColor = cell.Interior.Color;
+
+                                // Convert Excel color to RGB
+                                int colorInt = Convert.ToInt32(cellColor);
+                                System.Drawing.Color color = System.Drawing.ColorTranslator.FromOle(colorInt);
+                                string htmlColor = System.Drawing.ColorTranslator.ToHtml(color).ToUpper();
+
+                                // Skip if cell is grey (parameter doesn't exist) or red (read-only)
+                                if (htmlColor == "#D3D3D3" || htmlColor == "#FF4747")
                                 {
-                                    bool updated = SetParameterValue(element, paramName, cellValue.ToString());
-                                    if (updated) totalUpdated++;
+                                    totalSkipped++;
+                                    continue;
+                                }
+
+                                if (cellValue != null && cellValue.ToString().Trim() != "")
+                                {
+                                    UpdateResult result = SetParameterValueWithValidation(element, paramName, cellValue.ToString());
+
+                                    if (result.Success)
+                                    {
+                                        totalUpdated++;
+                                    }
+                                    else
+                                    {
+                                        // Add to error list
+                                        string errorKey = $"{categoryName} - {paramName}";
+                                        if (!importErrors.ContainsKey(errorKey))
+                                        {
+                                            importErrors[errorKey] = new List<string>();
+                                        }
+                                        importErrors[errorKey].Add($"Element ID: {elementIdStr} - {result.ErrorMessage}");
+                                    }
                                 }
                             }
                         }
@@ -530,7 +592,33 @@ namespace ExcelLink
 
                     trans.Commit();
 
-                    TaskDialog.Show("Success", $"Import completed successfully.\n{totalUpdated} parameter values updated.");
+                    // Show results
+                    StringBuilder resultMessage = new StringBuilder();
+                    resultMessage.AppendLine($"Import completed successfully.");
+                    resultMessage.AppendLine($"{totalUpdated} parameter values updated.");
+                    resultMessage.AppendLine($"{totalSkipped} cells skipped (read-only or non-existent parameters).");
+
+                    if (importErrors.Any())
+                    {
+                        resultMessage.AppendLine("\nThe following parameters could not be updated:");
+                        foreach (var error in importErrors)
+                        {
+                            resultMessage.AppendLine($"\n{error.Key}:");
+                            foreach (var elementError in error.Value)
+                            {
+                                resultMessage.AppendLine($"  - {elementError}");
+                            }
+                        }
+
+                        // Show detailed error report
+                        TaskDialogResult result = TaskDialog.Show("Import Results - Errors Found",
+                            resultMessage.ToString(),
+                            TaskDialogCommonButtons.Ok);
+                    }
+                    else
+                    {
+                        TaskDialog.Show("Import Results", resultMessage.ToString());
+                    }
                 }
 
                 // Close Excel
@@ -556,6 +644,153 @@ namespace ExcelLink
                 TaskDialog.Show("Error", $"Failed to import parameters:\n{ex.Message}");
                 return Result.Failed;
             }
+        }
+
+        private class UpdateResult
+        {
+            public bool Success { get; set; }
+            public string ErrorMessage { get; set; }
+        }
+
+        private UpdateResult SetParameterValueWithValidation(Element element, string parameterName, string value)
+        {
+            UpdateResult result = new UpdateResult { Success = false };
+
+            // Try instance parameter first
+            Parameter param = element.LookupParameter(parameterName);
+            Element targetElement = element;
+
+            // If not found, try type parameter
+            if (param == null)
+            {
+                ElementId typeId = element.GetTypeId();
+                if (typeId != ElementId.InvalidElementId)
+                {
+                    Element elementType = element.Document.GetElement(typeId);
+                    if (elementType != null)
+                    {
+                        param = elementType.LookupParameter(parameterName);
+                        targetElement = elementType;
+                    }
+                }
+            }
+
+            // If still not found, try built-in parameters
+            if (param == null)
+            {
+                BuiltInParameter bip = GetBuiltInParameterByName(parameterName);
+                if (bip != BuiltInParameter.INVALID)
+                {
+                    param = element.get_Parameter(bip);
+                    targetElement = element;
+
+                    // If not found on instance, try on type
+                    if (param == null)
+                    {
+                        ElementId typeId = element.GetTypeId();
+                        if (typeId != ElementId.InvalidElementId)
+                        {
+                            Element elementType = element.Document.GetElement(typeId);
+                            if (elementType != null)
+                            {
+                                param = elementType.get_Parameter(bip);
+                                targetElement = elementType;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (param == null)
+            {
+                result.ErrorMessage = "Parameter not found";
+                return result;
+            }
+
+            if (param.IsReadOnly)
+            {
+                result.ErrorMessage = "Parameter is read-only";
+                return result;
+            }
+
+            try
+            {
+                // Set value based on storage type
+                switch (param.StorageType)
+                {
+                    case StorageType.String:
+                        param.Set(value);
+                        result.Success = true;
+                        break;
+
+                    case StorageType.Integer:
+                        if (int.TryParse(value, out int intValue))
+                        {
+                            param.Set(intValue);
+                            result.Success = true;
+                        }
+                        else
+                        {
+                            result.ErrorMessage = $"Invalid integer value: '{value}'";
+                        }
+                        break;
+
+                    case StorageType.Double:
+                        if (double.TryParse(value, out double doubleValue))
+                        {
+                            param.Set(doubleValue);
+                            result.Success = true;
+                        }
+                        else
+                        {
+                            result.ErrorMessage = $"Invalid decimal value: '{value}'";
+                        }
+                        break;
+
+                    case StorageType.ElementId:
+                        // Special handling for Workset parameter
+                        if (paramName == "Workset")
+                        {
+                            // Find workset by name
+                            FilteredWorksetCollector worksetCollector = new FilteredWorksetCollector(element.Document);
+                            Workset workset = worksetCollector.FirstOrDefault(w => w.Name == value);
+
+                            if (workset != null)
+                            {
+                                param.Set(workset.Id);
+                                result.Success = true;
+                            }
+                            else
+                            {
+                                result.ErrorMessage = $"Workset '{value}' not found";
+                            }
+                        }
+                        else
+                        {
+                            // For other ElementId parameters, try to parse as integer
+                            if (int.TryParse(value, out int idValue))
+                            {
+                                param.Set(new ElementId(idValue));
+                                result.Success = true;
+                            }
+                            else
+                            {
+                                result.ErrorMessage = $"Invalid Element ID value: '{value}'";
+                            }
+                        }
+                        break;
+
+                    default:
+                        result.ErrorMessage = $"Unsupported parameter type: {param.StorageType}";
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                result.ErrorMessage = $"Error setting value: {ex.Message}";
+            }
+
+            return result;
         }
 
         private string GetParameterStorageTypeString(StorageType storageType)
@@ -586,6 +821,21 @@ namespace ExcelLink
             // Common parameter name mappings
             switch (paramName)
             {
+                // Basic parameters
+                case "Family":
+                    return BuiltInParameter.ELEM_FAMILY_PARAM;
+                case "Family and Type":
+                    return BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM;
+                case "Type":
+                    return BuiltInParameter.ELEM_TYPE_PARAM;
+                case "Type Id":
+                    return BuiltInParameter.SYMBOL_ID_PARAM;
+
+                // Workset parameter
+                case "Workset":
+                    return BuiltInParameter.ELEM_PARTITION_PARAM;
+
+                // Comments and descriptions
                 case "Type Comments":
                     return BuiltInParameter.ALL_MODEL_TYPE_COMMENTS;
                 case "Comments":
@@ -596,6 +846,8 @@ namespace ExcelLink
                     return BuiltInParameter.ALL_MODEL_TYPE_MARK;
                 case "Description":
                     return BuiltInParameter.ALL_MODEL_DESCRIPTION;
+
+                // URL and manufacturer info
                 case "URL":
                     return BuiltInParameter.ALL_MODEL_URL;
                 case "Type Name":
@@ -606,10 +858,14 @@ namespace ExcelLink
                     return BuiltInParameter.ALL_MODEL_MODEL;
                 case "Cost":
                     return BuiltInParameter.ALL_MODEL_COST;
+
+                // Images
                 case "Image":
                     return BuiltInParameter.ALL_MODEL_IMAGE;
                 case "Type Image":
                     return BuiltInParameter.ALL_MODEL_TYPE_IMAGE;
+
+                // Assembly and classification
                 case "Assembly Code":
                     return BuiltInParameter.UNIFORMAT_CODE;
                 case "Assembly Description":
@@ -620,8 +876,75 @@ namespace ExcelLink
                     return BuiltInParameter.OMNICLASS_CODE;
                 case "OmniClass Title":
                     return BuiltInParameter.OMNICLASS_DESCRIPTION;
+
+                // Room specific parameters
+                case "Name":
+                    return BuiltInParameter.ROOM_NAME;
+                case "Number":
+                    return BuiltInParameter.ROOM_NUMBER;
+                case "Department":
+                    return BuiltInParameter.ROOM_DEPARTMENT;
+                case "Occupancy":
+                    return BuiltInParameter.ROOM_OCCUPANCY;
+                case "Occupant":
+                    return BuiltInParameter.ROOM_OCCUPANT;
+                case "Base Finish":
+                    return BuiltInParameter.ROOM_FINISH_BASE;
+                case "Ceiling Finish":
+                    return BuiltInParameter.ROOM_FINISH_CEILING;
+                case "Wall Finish":
+                    return BuiltInParameter.ROOM_FINISH_WALL;
+                case "Floor Finish":
+                    return BuiltInParameter.ROOM_FINISH_FLOOR;
+
+                // Floor specific parameters
+                case "Default Thickness":
+                    return BuiltInParameter.FLOOR_ATTR_DEFAULT_THICKNESS_PARAM;
+                case "Thickness":
+                    return BuiltInParameter.FLOOR_ATTR_THICKNESS_PARAM;
+                case "Function":
+                    return BuiltInParameter.FUNCTION_PARAM;
+                case "Structural":
+                    return BuiltInParameter.FLOOR_PARAM_IS_STRUCTURAL;
+                case "Structural Usage":
+                    return BuiltInParameter.FLOOR_PARAM_STRUCTURAL_USAGE;
+
+                // Wall specific parameters
+                case "Width":
+                    return BuiltInParameter.WALL_ATTR_WIDTH_PARAM;
+                case "Wall Structural Usage":
+                    return BuiltInParameter.WALL_STRUCTURAL_USAGE_PARAM;
+
+                // General parameters
+                case "Area":
+                    return BuiltInParameter.HOST_AREA_COMPUTED;
+                case "Volume":
+                    return BuiltInParameter.HOST_VOLUME_COMPUTED;
+                case "Perimeter":
+                    return BuiltInParameter.HOST_PERIMETER_COMPUTED;
+                case "Length":
+                    return BuiltInParameter.CURVE_ELEM_LENGTH;
+                case "Level":
+                    return BuiltInParameter.LEVEL_PARAM;
+                case "Base Level":
+                    return BuiltInParameter.LEVEL_PARAM;
+                case "Top Level":
+                    return BuiltInParameter.WALL_HEIGHT_TYPE;
+                case "Base Offset":
+                    return BuiltInParameter.WALL_BASE_OFFSET;
+                case "Top Offset":
+                    return BuiltInParameter.WALL_TOP_OFFSET;
+                case "Height":
+                    return BuiltInParameter.WALL_USER_HEIGHT_PARAM;
+
+                // Door/Window parameters
                 case "Code Name":
                     return BuiltInParameter.DOOR_NUMBER;
+                case "Head Height":
+                    return BuiltInParameter.INSTANCE_HEAD_HEIGHT_PARAM;
+                case "Sill Height":
+                    return BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM;
+
                 default:
                     return BuiltInParameter.INVALID;
             }
@@ -698,79 +1021,23 @@ namespace ExcelLink
                     ElementId id = param.AsElementId();
                     if (id != ElementId.InvalidElementId)
                     {
-                        Element elem = element.Document.GetElement(id);
-                        return elem?.Name ?? id.IntegerValue.ToString();
+                        // Special handling for Workset parameter
+                        if (parameterName == "Workset")
+                        {
+                            Workset workset = element.Document.GetWorksetTable().GetWorkset(id);
+                            return workset?.Name ?? id.IntegerValue.ToString();
+                        }
+                        else
+                        {
+                            Element elem = element.Document.GetElement(id);
+                            return elem?.Name ?? id.IntegerValue.ToString();
+                        }
                     }
                     return "";
                 default:
                     return "";
             }
         }
-
-        private bool SetParameterValue(Element element, string parameterName, string value)
-        {
-            // Try instance parameter first
-            Parameter param = element.LookupParameter(parameterName);
-            bool isTypeParam = false;
-
-            // If not found, try type parameter
-            if (param == null)
-            {
-                ElementId typeId = element.GetTypeId();
-                if (typeId != ElementId.InvalidElementId)
-                {
-                    Element elementType = element.Document.GetElement(typeId);
-                    if (elementType != null)
-                    {
-                        param = elementType.LookupParameter(parameterName);
-                        isTypeParam = true;
-                    }
-                }
-            }
-
-            if (param == null || param.IsReadOnly) return false;
-
-            try
-            {
-                // Set value based on storage type
-                switch (param.StorageType)
-                {
-                    case StorageType.String:
-                        param.Set(value);
-                        return true;
-                    case StorageType.Integer:
-                        if (int.TryParse(value, out int intValue))
-                        {
-                            param.Set(intValue);
-                            return true;
-                        }
-                        break;
-                    case StorageType.Double:
-                        if (double.TryParse(value, out double doubleValue))
-                        {
-                            param.Set(doubleValue);
-                            return true;
-                        }
-                        break;
-                    case StorageType.ElementId:
-                        // For ElementId parameters, try to parse as integer
-                        if (int.TryParse(value, out int idValue))
-                        {
-                            param.Set(new ElementId(idValue));
-                            return true;
-                        }
-                        break;
-                }
-            }
-            catch (Exception ex)
-            {
-                // Log error but continue processing
-                System.Diagnostics.Debug.WriteLine($"Failed to set parameter {parameterName}: {ex.Message}");
-            }
-
-            return false;
-        }
-
         internal static PushButtonData GetButtonData()
         {
             // use this method to define the properties for this command in the Revit ribbon

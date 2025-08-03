@@ -205,18 +205,47 @@ namespace ExcelLink.Forms
                 "Legend Components",
                 "Internal Origin",
                 "Cameras",
-                "Rooms",
                 "HVAC Zones",
                 "Pipe Segments",
                 "Area Based Load Type",
                 "Circuit Naming Scheme",
-                "<Sketch>" // Excludes the "<Sketch>" category
+                "<Sketch>",
+                "Center Line",
+                "Center line", // Different casing
+                "Lines",
+                "Detail Items",
+                "Model Lines",
+                "Detail Lines",
+                "<Room Separation>",
+                "<Area Boundary>",
+                "<Space Separation>",
+                "Curtain Panel Tags", // Exclude tags
+                "Curtain System Tags",
+                "Detail Item Tags",
+                "Door Tags",
+                "Floor Tags",
+                "Generic Annotations",
+                "Keynote Tags",
+                "Material Tags",
+                "Multi-Category Tags",
+                "Parking Tags",
+                "Plumbing Fixture Tags",
+                "Property Line Segment Tags",
+                "Property Tags",
+                "Revision Clouds",
+                "Room Tags",
+                "Space Tags",
+                "Structural Annotations",
+                "Wall Tags",
+                "Window Tags"
             };
 
-            // Filter to only include model categories
+            // Filter to only include model categories AND Rooms (which is not a model category)
             var modelCategories = categoriesWithElements
-                .Where(c => c.CategoryType == CategoryType.Model &&
-                           !excludedCategoryNames.Contains(c.Name))
+                .Where(c => (c.CategoryType == CategoryType.Model || c.Name == "Rooms") &&
+                           !excludedCategoryNames.Contains(c.Name) &&
+                           !c.Name.ToLower().Contains("line") && // Exclude any category with "line" in the name
+                           !c.Name.ToLower().Contains("sketch")) // Exclude any category with "sketch" in the name
                 .ToList();
 
             return modelCategories;
@@ -297,7 +326,8 @@ namespace ExcelLink.Forms
 
             if (!selectedCategories.Any()) return;
 
-            List<Parameter> allParameters = new List<Parameter>();
+            HashSet<string> allParameterNames = new HashSet<string>();
+            Dictionary<string, Parameter> parameterMap = new Dictionary<string, Parameter>();
 
             foreach (var categoryItem in selectedCategories)
             {
@@ -323,8 +353,19 @@ namespace ExcelLink.Forms
                     // Collect parameters from instances
                     foreach (Element instance in instances)
                     {
-                        // Get instance parameters
-                        allParameters.AddRange(GetAllParametersFromElement(instance));
+                        // Get all parameters from the element (including built-in)
+                        foreach (Parameter param in instance.Parameters)
+                        {
+                            if (param != null && param.Definition != null)
+                            {
+                                string paramName = param.Definition.Name;
+                                if (!allParameterNames.Contains(paramName))
+                                {
+                                    allParameterNames.Add(paramName);
+                                    parameterMap[paramName] = param;
+                                }
+                            }
+                        }
 
                         // Get type parameters
                         ElementId typeId = instance.GetTypeId();
@@ -333,9 +374,23 @@ namespace ExcelLink.Forms
                             Element elementType = _doc.GetElement(typeId);
                             if (elementType != null)
                             {
-                                allParameters.AddRange(GetAllParametersFromElement(elementType));
+                                foreach (Parameter param in elementType.Parameters)
+                                {
+                                    if (param != null && param.Definition != null)
+                                    {
+                                        string paramName = param.Definition.Name;
+                                        if (!allParameterNames.Contains(paramName))
+                                        {
+                                            allParameterNames.Add(paramName);
+                                            parameterMap[paramName] = param;
+                                        }
+                                    }
+                                }
                             }
                         }
+
+                        // Add important built-in parameters that might not show up in Parameters collection
+                        AddSpecificBuiltInParameters(instance, allParameterNames, parameterMap);
 
                         break; // We only need one instance per category to get all parameters
                     }
@@ -345,32 +400,45 @@ namespace ExcelLink.Forms
             // List of parameter names to exclude
             HashSet<string> excludedParameters = new HashSet<string>
             {
-                "Family and Type",
-                "Family",
-                "Type",
                 "Phase Created",
                 "Phase Demolished",
+                "View Template",
+                "Design Option",
+                "Edited by",
+                "View Scale",
+                "Detail Level",
+                "Visible",
+                "Graphics Overrides",
+                "Family Name"
             };
 
-            // Filter and deduplicate parameters
-            var distinctParameters = allParameters
-                .Where(p => !p.IsReadOnly &&
-                           !excludedParameters.Contains(p.Definition.Name) &&
-                           (p.StorageType == StorageType.String ||
-                            p.StorageType == StorageType.Double ||
-                            p.StorageType == StorageType.Integer))
-                .GroupBy(x => x.Definition.Name)
-                .Select(x => x.First())
-                .OrderBy(x => x.Definition.Name)
+            // List of ElementId parameters that are allowed (exception list)
+            HashSet<string> allowedElementIdParameters = new HashSet<string>
+            {
+                "Family",
+                "Family and Type",
+                "Workset"
+            };
+
+            // Filter and sort parameters
+            var distinctParameters = parameterMap
+                .Where(kvp => !excludedParameters.Contains(kvp.Key) &&
+                             ((kvp.Value.StorageType == StorageType.String ||
+                               kvp.Value.StorageType == StorageType.Double ||
+                               kvp.Value.StorageType == StorageType.Integer) ||
+                              (kvp.Value.StorageType == StorageType.ElementId &&
+                               allowedElementIdParameters.Contains(kvp.Key))) && // Only allow specific ElementId parameters
+                             kvp.Value.StorageType != StorageType.None)
+                .OrderBy(kvp => kvp.Key)
                 .ToList();
 
             // Add "Select All" option
             ParameterItems.Add(new ParaExportParameterItem("Select All Parameters", true));
 
             // Add individual parameters
-            foreach (Parameter param in distinctParameters)
+            foreach (var kvp in distinctParameters)
             {
-                ParameterItems.Add(new ParaExportParameterItem(param));
+                ParameterItems.Add(new ParaExportParameterItem(kvp.Value));
             }
 
             // Set ListView source
@@ -378,6 +446,95 @@ namespace ExcelLink.Forms
 
             // Initialize search box
             txtParameterSearch.Text = "Search parameters...";
+        }
+
+        private void AddSpecificBuiltInParameters(Element element, HashSet<string> parameterNames, Dictionary<string, Parameter> parameterMap)
+        {
+            // List of specific built-in parameters to check
+            var builtInParamsToCheck = new Dictionary<string, BuiltInParameter>
+            {
+                { "Family", BuiltInParameter.ELEM_FAMILY_PARAM },
+                { "Family and Type", BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM },
+                { "Type", BuiltInParameter.ELEM_TYPE_PARAM },
+                { "Type Name", BuiltInParameter.SYMBOL_NAME_PARAM },
+                { "Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS },
+                { "Type Comments", BuiltInParameter.ALL_MODEL_TYPE_COMMENTS },
+                { "Mark", BuiltInParameter.ALL_MODEL_MARK },
+                { "Type Mark", BuiltInParameter.ALL_MODEL_TYPE_MARK },
+                { "Description", BuiltInParameter.ALL_MODEL_DESCRIPTION },
+                { "Manufacturer", BuiltInParameter.ALL_MODEL_MANUFACTURER },
+                { "Model", BuiltInParameter.ALL_MODEL_MODEL },
+                { "URL", BuiltInParameter.ALL_MODEL_URL },
+                { "Cost", BuiltInParameter.ALL_MODEL_COST },
+                { "Assembly Code", BuiltInParameter.UNIFORMAT_CODE },
+                { "Assembly Description", BuiltInParameter.UNIFORMAT_DESCRIPTION },
+                { "Keynote", BuiltInParameter.KEYNOTE_PARAM },
+            };
+
+            // Add category-specific parameters
+            if (element.Category != null)
+            {
+                string categoryName = element.Category.Name;
+
+                if (categoryName.Contains("Floor"))
+                {
+                    builtInParamsToCheck["Default Thickness"] = BuiltInParameter.FLOOR_ATTR_DEFAULT_THICKNESS_PARAM;
+                    builtInParamsToCheck["Thickness"] = BuiltInParameter.FLOOR_ATTR_THICKNESS_PARAM;
+                    builtInParamsToCheck["Function"] = BuiltInParameter.FUNCTION_PARAM;
+                    builtInParamsToCheck["Structural"] = BuiltInParameter.FLOOR_PARAM_IS_STRUCTURAL;
+                }
+                else if (categoryName.Contains("Wall"))
+                {
+                    builtInParamsToCheck["Width"] = BuiltInParameter.WALL_ATTR_WIDTH_PARAM;
+                    builtInParamsToCheck["Function"] = BuiltInParameter.FUNCTION_PARAM;
+                    builtInParamsToCheck["Height"] = BuiltInParameter.WALL_USER_HEIGHT_PARAM;
+                    builtInParamsToCheck["Base Offset"] = BuiltInParameter.WALL_BASE_OFFSET;
+                    builtInParamsToCheck["Top Offset"] = BuiltInParameter.WALL_TOP_OFFSET;
+                }
+                else if (categoryName.Contains("Door") || categoryName.Contains("Window"))
+                {
+                    builtInParamsToCheck["Head Height"] = BuiltInParameter.INSTANCE_HEAD_HEIGHT_PARAM;
+                    builtInParamsToCheck["Sill Height"] = BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM;
+                }
+
+                // Common geometric parameters
+                builtInParamsToCheck["Area"] = BuiltInParameter.HOST_AREA_COMPUTED;
+                builtInParamsToCheck["Volume"] = BuiltInParameter.HOST_VOLUME_COMPUTED;
+                builtInParamsToCheck["Perimeter"] = BuiltInParameter.HOST_PERIMETER_COMPUTED;
+                builtInParamsToCheck["Level"] = BuiltInParameter.LEVEL_PARAM;
+            }
+
+            // Try to get each built-in parameter
+            foreach (var kvp in builtInParamsToCheck)
+            {
+                try
+                {
+                    Parameter param = element.get_Parameter(kvp.Value);
+                    if (param == null)
+                    {
+                        // Try on type
+                        ElementId typeId = element.GetTypeId();
+                        if (typeId != ElementId.InvalidElementId)
+                        {
+                            Element elementType = _doc.GetElement(typeId);
+                            if (elementType != null)
+                            {
+                                param = elementType.get_Parameter(kvp.Value);
+                            }
+                        }
+                    }
+
+                    if (param != null && param.Definition != null && !parameterNames.Contains(kvp.Key))
+                    {
+                        parameterNames.Add(kvp.Key);
+                        parameterMap[kvp.Key] = param;
+                    }
+                }
+                catch
+                {
+                    // Skip if parameter doesn't exist for this element type
+                }
+            }
         }
 
         private List<Parameter> GetAllParametersFromElement(Element element)
