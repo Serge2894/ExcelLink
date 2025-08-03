@@ -1,9 +1,13 @@
-﻿using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.DB;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
+using Forms = System.Windows.Forms;
+using Excel = Microsoft.Office.Interop.Excel;
+using System.Drawing;
+using ExcelLink.Forms;
+using System.Diagnostics;
 
 namespace ExcelLink.Common
 {
@@ -33,6 +37,7 @@ namespace ExcelLink.Common
             return null;
         }
 
+        // This method finds a parameter by name, first by LookupParameter, then by BuiltInParameter.
         internal static Parameter GetParameterByName(Element curElem, string paramName)
         {
             // First, try to get the parameter directly by name
@@ -52,14 +57,7 @@ namespace ExcelLink.Common
             return param;
         }
 
-        internal static string GetParameterValueString(Element curElem, string paramName)
-        {
-            Parameter curParam = GetParameterByName(curElem, paramName);
-            if (curParam != null)
-                return curParam.AsString();
-            return string.Empty;
-        }
-
+        // This method gets the parameter value as a formatted string.
         internal static string GetParameterValue(Element curElem, string paramName)
         {
             Parameter curParam = GetParameterByName(curElem, paramName);
@@ -82,6 +80,7 @@ namespace ExcelLink.Common
             return string.Empty;
         }
 
+        // This method sets the parameter value based on its storage type.
         internal static bool SetParameterValue(Element curElem, string paramName, string value)
         {
             Parameter curParam = GetParameterByName(curElem, paramName);
@@ -101,8 +100,6 @@ namespace ExcelLink.Common
                             curParam.Set(value);
                             break;
                         case StorageType.ElementId:
-                            // This is a complex case, not directly supported here.
-                            // The value would need to be an ElementId.
                             return false;
                         default:
                             return false;
@@ -118,21 +115,19 @@ namespace ExcelLink.Common
             return false;
         }
 
+        // This is a helper method to map a string name to a BuiltInParameter enum.
         internal static BuiltInParameter GetBuiltInParameterByName(string paramName)
         {
-            // This is a helper method to map a string name to a BuiltInParameter enum.
-            // This is a simplified implementation and may not cover all cases.
-            // In a more complete implementation, you might use a pre-populated dictionary
-            // for performance.
             if (paramName == "Comments") return BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS;
             if (paramName == "Family") return BuiltInParameter.ELEM_FAMILY_PARAM;
             if (paramName == "Family and Type") return BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM;
             if (paramName == "Type") return BuiltInParameter.ELEM_TYPE_PARAM;
             if (paramName == "Type Name") return BuiltInParameter.SYMBOL_NAME_PARAM;
-            // ... add other mappings as needed.
+
             return BuiltInParameter.INVALID;
         }
 
+        // This is a helper method to get the parameter storage type as a string.
         internal static string GetParameterStorageTypeString(StorageType storageType)
         {
             switch (storageType)

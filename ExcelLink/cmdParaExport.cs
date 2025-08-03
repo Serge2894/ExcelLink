@@ -17,17 +17,23 @@ namespace ExcelLink
     [Transaction(TransactionMode.Manual)]
     public class cmdParaExport : IExternalCommand
     {
+        public static ExternalEvent ImportExternalEvent;
+        public static ImportEventHandler ImportEventHandler;
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            // Revit application and document variables
             UIApplication uiapp = commandData.Application;
             UIDocument uidoc = uiapp.ActiveUIDocument;
             Document doc = uidoc.Document;
 
             try
             {
-                // Create and show the form as modeless
-                frmParaExport form = new frmParaExport(doc);
+                if (ImportExternalEvent == null)
+                {
+                    ImportEventHandler = new ImportEventHandler();
+                    ImportExternalEvent = ExternalEvent.Create(ImportEventHandler);
+                }
+
+                frmParaExport form = new frmParaExport(doc, ImportExternalEvent, ImportEventHandler);
                 form.Show();
 
                 return Result.Succeeded;
@@ -41,7 +47,6 @@ namespace ExcelLink
 
         internal static PushButtonData GetButtonData()
         {
-            // use this method to define the properties for this command in the Revit ribbon
             string buttonInternalName = "btnParaExport";
             string buttonTitle = "Para\rExport";
 
