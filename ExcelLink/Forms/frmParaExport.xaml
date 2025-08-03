@@ -132,7 +132,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <Label Content="Select Categories:" Grid.Row="0" FontWeight="Bold" Background="#E0E0E0"/>
+                <Label Content="Select Categories:" Grid.Row="0" FontWeight="Bold"/>
                 <TextBox x:Name="txtCategorySearch"
                          Grid.Row="1"
                          Margin="0,5,0,5"
@@ -151,7 +151,7 @@
                                                 BorderThickness="1"
                                                 CornerRadius="5">
                                             <ScrollViewer x:Name="PART_ContentHost"
-                                                          Margin="{TemplateBinding Padding}"/>
+                                                        Margin="{TemplateBinding Padding}"/>
                                         </Border>
                                     </ControlTemplate>
                                 </Setter.Value>
@@ -182,7 +182,7 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Label Content="Available Parameters:" Grid.Row="0" FontWeight="Bold" Background="#E0E0E0"/>
+                <Label Content="Available Parameters:" Grid.Row="0" FontWeight="Bold"/>
                 <TextBox x:Name="txtParameterSearch"
                          Grid.Row="1"
                          Margin="0,5,0,5"
@@ -221,7 +221,8 @@
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               SelectionMode="Multiple"
                               ItemTemplate="{StaticResource ParameterItemTemplate}"
-                              ItemContainerStyle="{StaticResource ColoredListViewItemStyle}">
+                              ItemContainerStyle="{StaticResource ColoredListViewItemStyle}"
+                              MouseDoubleClick="lvAvailableParameters_MouseDoubleClick">
                     </ListView>
                 </Border>
                 <StackPanel Grid.Row="3" Margin="0,5,0,0">
@@ -236,10 +237,14 @@
             </Grid>
 
             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="5,0,5,0">
-                <Button x:Name="btnMoveRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;" Click="btnMoveRight_Click"/>
-                <Button x:Name="btnMoveAllRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;&gt;" Click="btnMoveAllRight_Click"/>
-                <Button x:Name="btnMoveAllLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;&lt;" Click="btnMoveAllLeft_Click"/>
-                <Button x:Name="btnMoveLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;" Click="btnMoveLeft_Click"/>
+                <Button x:Name="btnMoveRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;"
+                        Click="btnMoveRight_Click"/>
+                <Button x:Name="btnMoveAllRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;&gt;"
+                        Click="btnMoveAllRight_Click"/>
+                <Button x:Name="btnMoveAllLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;&lt;"
+                        Click="btnMoveAllLeft_Click"/>
+                <Button x:Name="btnMoveLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;"
+                        Click="btnMoveLeft_Click"/>
                 <Button x:Name="btnMoveUp" Style="{StaticResource ActionButtonStyle}" Content="▲" Click="btnMoveUp_Click"/>
                 <Button x:Name="btnMoveDown" Style="{StaticResource ActionButtonStyle}" Content="▼" Click="btnMoveDown_Click"/>
             </StackPanel>
@@ -249,7 +254,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <Label Content="Selected Parameters:" Grid.Row="0" FontWeight="Bold" Background="#E0E0E0"/>
+                <Label Content="Selected Parameters:" Grid.Row="0" FontWeight="Bold"/>
                 <Grid Grid.Row="1">
                     <Border Grid.Column="0"
                             BorderThickness="1"
@@ -263,7 +268,8 @@
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   SelectionMode="Multiple"
                                   ItemTemplate="{StaticResource ParameterItemTemplate}"
-                                  ItemContainerStyle="{StaticResource ColoredListViewItemStyle}">
+                                  ItemContainerStyle="{StaticResource ColoredListViewItemStyle}"
+                                  MouseDoubleClick="lvSelectedParameters_MouseDoubleClick">
                         </ListView>
                     </Border>
                 </Grid>

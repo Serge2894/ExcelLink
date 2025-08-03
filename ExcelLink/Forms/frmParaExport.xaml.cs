@@ -14,11 +14,13 @@ using Excel = Microsoft.Office.Interop.Excel;
 using System.Drawing;
 using System.Text;
 using System.Threading.Tasks;
+using ExcelLink.Common;
+using System.Reflection;
 
 namespace ExcelLink.Forms
 {
     /// <summary>
-    /// Interaction logic for frmParaExport.xaml
+    /// Interaction with frmParaExport.xaml
     /// </summary>
     public partial class frmParaExport : Window, INotifyPropertyChanged
     {
@@ -177,24 +179,364 @@ namespace ExcelLink.Forms
             // Show progress bar
             ShowProgressBar();
 
+            Excel.Application excel = null;
+            Excel.Workbook workbook = null;
+            Excel.Worksheet worksheet = null;
+            Excel.Worksheet colorLegendSheet = null;
+
             try
             {
-                // Create Excel application
-                Excel.Application excel = new Excel.Application();
-                Excel.Workbook workbook = excel.Workbooks.Add();
+                // Create Excel application and workbook
+                excel = new Excel.Application();
+                workbook = excel.Workbooks.Add();
 
-                // ... (your export logic here)
-                for (int i = 0; i <= 100; i += 10)
+                // Remove default sheets except the first one
+                while (workbook.Worksheets.Count > 1)
                 {
-                    UpdateProgressBar(i);
-                    // In a real scenario, you'd perform a part of the export here.
+                    ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
                 }
 
-                TaskDialog.Show("Success", "Export completed successfully!");
+                // Create the Color Legend Sheet first
+                colorLegendSheet = (Excel.Worksheet)workbook.Worksheets[1];
+                colorLegendSheet.Name = "Color Legend";
 
+                // Merge and center title
+                Excel.Range titleRange = colorLegendSheet.Range[colorLegendSheet.Cells[1, 2], colorLegendSheet.Cells[1, 4]];
+                titleRange.Merge();
+                titleRange.Value2 = "Color Legend";
+                titleRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+                titleRange.Font.Bold = true;
+                titleRange.Font.Size = 14;
+
+                // Add thick border around title
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeLeft].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeTop].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeBottom].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeRight].LineStyle = Excel.XlLineStyle.xlContinuous;
+                titleRange.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
+
+                // Write legend headers
+                ((Excel.Range)colorLegendSheet.Cells[3, 2]).Value2 = "Color";
+                ((Excel.Range)colorLegendSheet.Cells[3, 3]).Value2 = "Description";
+                ((Excel.Range)colorLegendSheet.Cells[3, 4]).Value2 = "Notes";
+
+                // Format headers
+                Excel.Range legendHeaderRange = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[3, 4]];
+                legendHeaderRange.Font.Bold = true;
+                legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
+                legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+
+                // Write legend content
+                Excel.Range greyCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
+                greyCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+                ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Parameter does not exist for this element";
+                ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Do not fill or edit cell";
+
+                Excel.Range lightYellowCell = (Excel.Range)colorLegendSheet.Cells[5, 2];
+                lightYellowCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+                ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Type value";
+                ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Type parameters with the same ID should be filled the same";
+
+                Excel.Range redCell = (Excel.Range)colorLegendSheet.Cells[6, 2];
+                redCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Read-only value";
+                ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Uneditable cell";
+
+                // Apply borders to all data cells
+                Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[6, 4]];
+                dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
+
+                // Apply thick outside border to the entire table
+                Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 4]];
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].LineStyle = Excel.XlLineStyle.xlContinuous;
+                entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
+
+                // Set column widths
+                ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
+                ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 40;
+                ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
+
+                // Center align the color column
+                Excel.Range colorColumn = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 2]];
+                colorColumn.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+
+                // Get elements based on selected categories and scope
+                var selectedCategories = CategoryItems
+                    .Where(item => item.IsSelected && !item.IsSelectAll)
+                    .ToList();
+
+                // Process each category
+                int sheetIndex = 1;
+                foreach (var categoryItem in selectedCategories)
+                {
+                    sheetIndex++;
+                    // Create or get worksheet
+                    if (workbook.Worksheets.Count < sheetIndex)
+                    {
+                        worksheet = (Excel.Worksheet)workbook.Worksheets.Add(After: workbook.Worksheets[workbook.Worksheets.Count]);
+                    }
+                    else
+                    {
+                        worksheet = (Excel.Worksheet)workbook.Worksheets[sheetIndex];
+                    }
+
+                    // Set sheet name (Excel limits sheet names to 31 characters)
+                    string sheetName = categoryItem.CategoryName.Length > 31 ?
+                        categoryItem.CategoryName.Substring(0, 31) : categoryItem.CategoryName;
+                    worksheet.Name = sheetName;
+
+                    // Write headers with multi-line text
+                    Excel.Range elementIdHeader = (Excel.Range)worksheet.Cells[1, 1];
+                    elementIdHeader.Value2 = "Element ID";
+                    elementIdHeader.ColumnWidth = 12;
+
+                    List<string> selectedParameters = SelectedParameterNames;
+
+                    for (int i = 0; i < selectedParameters.Count; i++)
+                    {
+                        string paramName = selectedParameters[i];
+                        string paramType = "N/A";
+                        string paramStorageType = "N/A";
+
+                        // Get an instance element to check parameters
+                        FilteredElementCollector tempCollector;
+                        if (IsEntireModelChecked)
+                        {
+                            tempCollector = new FilteredElementCollector(_doc);
+                        }
+                        else
+                        {
+                            tempCollector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                        }
+
+                        tempCollector.OfCategoryId(categoryItem.Category.Id);
+                        tempCollector.WhereElementIsNotElementType();
+                        Element tempElement = tempCollector.FirstElement();
+
+                        Parameter param = null;
+                        bool isTypeParam = false;
+
+                        if (tempElement != null)
+                        {
+                            // First check instance parameter
+                            param = tempElement.LookupParameter(paramName);
+                            if (param != null)
+                            {
+                                paramType = "Instance Parameter";
+                            }
+                            else
+                            {
+                                // Check type parameter
+                                Element typeElem = _doc.GetElement(tempElement.GetTypeId());
+                                if (typeElem != null)
+                                {
+                                    param = typeElem.LookupParameter(paramName);
+                                    if (param != null)
+                                    {
+                                        paramType = "Type Parameter";
+                                        isTypeParam = true;
+                                    }
+                                }
+                            }
+
+                            // If still not found, check for built-in parameters
+                            if (param == null)
+                            {
+                                BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
+                                if (bip != BuiltInParameter.INVALID)
+                                {
+                                    param = tempElement.get_Parameter(bip);
+                                    if (param != null)
+                                    {
+                                        paramType = "Instance Parameter";
+                                    }
+                                    else
+                                    {
+                                        // Check if it's a built-in type parameter
+                                        Element typeElem = _doc.GetElement(tempElement.GetTypeId());
+                                        if (typeElem != null)
+                                        {
+                                            param = typeElem.get_Parameter(bip);
+                                            if (param != null)
+                                            {
+                                                paramType = "Type Parameter";
+                                                isTypeParam = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (param != null)
+                            {
+                                paramStorageType = Utils.GetParameterStorageTypeString(param.StorageType);
+                            }
+                        }
+
+                        string headerText = $"{paramName}{Environment.NewLine}({paramType}){Environment.NewLine}Type: {paramStorageType}";
+                        Excel.Range headerCell = (Excel.Range)worksheet.Cells[1, i + 2];
+                        headerCell.Value2 = headerText;
+
+                        // Set column width based on parameter name length, but with reasonable limits
+                        int columnWidth = Math.Max(15, Math.Min(30, paramName.Length + 5));
+                        headerCell.ColumnWidth = columnWidth;
+                    }
+
+                    // Format headers
+                    Excel.Range headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, selectedParameters.Count + 1]];
+                    headerRange.Font.Bold = true;
+                    headerRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
+                    headerRange.WrapText = true;
+                    headerRange.VerticalAlignment = Excel.XlVAlign.xlVAlignTop;
+                    headerRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+                    headerRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                    headerRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
+
+                    // Add auto-filter to the headers
+                    headerRange.AutoFilter(1, Type.Missing, Excel.XlAutoFilterOperator.xlAnd, Type.Missing, true);
+
+                    // Set row height to accommodate 3 lines of text
+                    ((Excel.Range)worksheet.Rows[1]).RowHeight = 45;
+
+                    // Get all elements in the category and scope for data writing
+                    FilteredElementCollector dataCollector;
+                    if (IsEntireModelChecked)
+                    {
+                        dataCollector = new FilteredElementCollector(_doc);
+                    }
+                    else
+                    {
+                        dataCollector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                    }
+                    dataCollector.OfCategoryId(categoryItem.Category.Id);
+                    dataCollector.WhereElementIsNotElementType();
+                    List<Element> elements = dataCollector.ToList();
+
+                    // Write element data
+                    int row = 2;
+                    foreach (Element element in elements)
+                    {
+                        // Write Element ID and color it grey (#D3D3D3) for Read-only
+                        Excel.Range idCell = (Excel.Range)worksheet.Cells[row, 1];
+                        idCell.Value2 = element.Id.IntegerValue.ToString();
+                        idCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+                        idCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                        idCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
+
+                        // Write parameter values
+                        for (int col = 0; col < selectedParameters.Count; col++)
+                        {
+                            string paramName = selectedParameters[col];
+                            Excel.Range dataCell = (Excel.Range)worksheet.Cells[row, col + 2];
+
+                            Parameter param = element.LookupParameter(paramName);
+                            string value = string.Empty;
+                            bool isTypeParam = false;
+
+                            // Check if the parameter exists as an instance parameter
+                            if (param != null)
+                            {
+                                value = Utils.GetParameterValue(element, paramName);
+                            }
+                            else
+                            {
+                                // Check if the parameter exists as a type parameter
+                                Element typeElem = _doc.GetElement(element.GetTypeId());
+                                if (typeElem != null)
+                                {
+                                    param = typeElem.LookupParameter(paramName);
+                                    if (param != null)
+                                    {
+                                        value = Utils.GetParameterValue(typeElem, paramName);
+                                        isTypeParam = true;
+                                    }
+                                }
+                            }
+
+                            // If still not found, check built-in parameters
+                            if (param == null)
+                            {
+                                BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
+                                if (bip != BuiltInParameter.INVALID)
+                                {
+                                    param = element.get_Parameter(bip);
+                                    if (param != null)
+                                    {
+                                        value = Utils.GetParameterValue(element, paramName);
+                                    }
+                                    else
+                                    {
+                                        // Check if it's a built-in type parameter
+                                        Element typeElem = _doc.GetElement(element.GetTypeId());
+                                        if (typeElem != null)
+                                        {
+                                            param = typeElem.get_Parameter(bip);
+                                            if (param != null)
+                                            {
+                                                value = Utils.GetParameterValue(typeElem, paramName);
+                                                isTypeParam = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (param != null)
+                            {
+                                dataCell.Value2 = value;
+                                // Special handling for Family and Family and Type - they should always be red
+                                if (paramName == "Family" || paramName == "Family and Type")
+                                {
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                                }
+                                else if (param.IsReadOnly)
+                                {
+                                    // Other read-only parameters get red color
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                                }
+                                else if (isTypeParam)
+                                {
+                                    // Type parameters get light yellow color
+                                    dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+                                }
+                            }
+                            else
+                            {
+                                // If parameter does not exist, color the cell grey (#D3D3D3)
+                                dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+                            }
+
+                            // Add borders to all data cells
+                            dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                            dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
+                        }
+                        row++;
+                    }
+
+                    // Auto-fit columns
+                    worksheet.Columns.AutoFit();
+
+                    UpdateProgressBar((int)((double)sheetIndex / (selectedCategories.Count + 1) * 100));
+                }
+
+                // Save the file
                 workbook.SaveAs(excelFile);
-                ((Excel.Worksheet)workbook.Worksheets["Color Legend"]).Activate();
+
+                // Activate the Color Legend sheet and make Excel visible
+                colorLegendSheet.Activate();
                 excel.Visible = true;
+
+                TaskDialog.Show("Success", "Export completed successfully!");
             }
             catch (Exception ex)
             {
@@ -203,6 +545,12 @@ namespace ExcelLink.Forms
             finally
             {
                 HideProgressBar();
+                // We do not close the workbook and quit the application in the finally block
+                // as the user wants the file to remain open. We only release the COM objects.
+                if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
+                if (colorLegendSheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(colorLegendSheet);
+                if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+                if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
             }
         }
 
@@ -223,16 +571,121 @@ namespace ExcelLink.Forms
             // Show progress bar
             ShowProgressBar();
 
+            Excel.Application excel = null;
+            Excel.Workbook workbook = null;
+            Excel.Worksheet worksheet = null;
+            Excel.Range usedRange = null;
+
             try
             {
-                // ... (your import logic here)
-                for (int i = 0; i <= 100; i += 10)
+                // Create Excel application
+                excel = new Excel.Application();
+                workbook = excel.Workbooks.Open(excelFile);
+
+                // Find the correct worksheet to import from, ignoring the "Color Legend" sheet
+                worksheet = workbook.Worksheets.Cast<Excel.Worksheet>()
+                                    .FirstOrDefault(s => s.Name != "Color Legend");
+
+                if (worksheet == null)
                 {
-                    UpdateProgressBar(i);
-                    // In a real scenario, you'd perform a part of the import here.
+                    TaskDialog.Show("Error", "Could not find a valid worksheet to import from.");
+                    return;
                 }
 
-                TaskDialog.Show("Success", "Import completed successfully!");
+                usedRange = worksheet.UsedRange;
+
+                // Get headers
+                List<string> headers = new List<string>();
+                for (int j = 1; j <= usedRange.Columns.Count; j++)
+                {
+                    var headerCell = usedRange.Cells[1, j] as Excel.Range;
+                    if (headerCell != null && headerCell.Value2 != null)
+                    {
+                        headers.Add(headerCell.Value2.ToString());
+                    }
+                }
+
+                int elementIdIndex = headers.IndexOf("ElementId");
+                if (elementIdIndex == -1)
+                {
+                    TaskDialog.Show("Error", "The Excel file must contain a column named 'ElementId'.");
+                    return;
+                }
+
+                // Track errors for a summary
+                List<string> errorMessages = new List<string>();
+
+                // Start Revit transaction
+                using (Transaction t = new Transaction(_doc, "Import Parameters from Excel"))
+                {
+                    t.Start();
+                    // Loop through rows
+                    for (int i = 2; i <= usedRange.Rows.Count; i++)
+                    {
+                        var idCell = usedRange.Cells[i, elementIdIndex + 1] as Excel.Range;
+
+                        // Handle potential non-numeric ElementId
+                        if (idCell == null || idCell.Value2 == null) continue;
+
+                        string idString = idCell.Value2.ToString();
+                        int elementIdInt;
+
+                        if (!int.TryParse(idString, out elementIdInt))
+                        {
+                            errorMessages.Add($"Row {i}: Failed to parse ElementId '{idString}'. Skipping row.");
+                            continue;
+                        }
+
+                        ElementId elementId = new ElementId(elementIdInt);
+                        Element element = _doc.GetElement(elementId);
+
+                        if (element != null)
+                        {
+                            // Loop through parameters
+                            for (int j = 0; j < headers.Count; j++)
+                            {
+                                if (j != elementIdIndex)
+                                {
+                                    string paramName = headers[j];
+                                    var paramCell = usedRange.Cells[i, j + 1] as Excel.Range;
+                                    string paramValue = paramCell?.Value2?.ToString();
+
+                                    if (!string.IsNullOrEmpty(paramValue))
+                                    {
+                                        try
+                                        {
+                                            Utils.SetParameterValue(element, paramName, paramValue);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            errorMessages.Add($"Row {i}: Failed to set parameter '{paramName}' with value '{paramValue}'. Error: {ex.Message}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            errorMessages.Add($"Row {i}: Element with ID '{elementIdInt}' not found in model. Skipping row.");
+                        }
+                        UpdateProgressBar((int)((double)(i - 1) / (usedRange.Rows.Count - 1) * 100));
+                    }
+                    t.Commit();
+                }
+
+                if (errorMessages.Any())
+                {
+                    string summary = "Import completed with errors:\n" + string.Join("\n", errorMessages.Take(10));
+                    if (errorMessages.Count > 10)
+                    {
+                        summary += $"\n...and {errorMessages.Count - 10} more errors.";
+                    }
+                    TaskDialog.Show("Import Completed with Errors", summary);
+                }
+                else
+                {
+                    TaskDialog.Show("Success", "Import completed successfully!");
+                }
             }
             catch (Exception ex)
             {
@@ -241,6 +694,12 @@ namespace ExcelLink.Forms
             finally
             {
                 HideProgressBar();
+                if (workbook != null) workbook.Close(false);
+                if (excel != null) excel.Quit();
+                if (usedRange != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(usedRange);
+                if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
+                if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+                if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
             }
         }
 
@@ -748,6 +1207,32 @@ namespace ExcelLink.Forms
             }
         }
 
+        // New methods for double-click functionality
+        private void lvAvailableParameters_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (lvAvailableParameters.SelectedItem is ParaExportParameterItem item)
+            {
+                MoveParameter(item, AvailableParameterItems, SelectedParameterItems);
+            }
+        }
+
+        private void lvSelectedParameters_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (lvSelectedParameters.SelectedItem is ParaExportParameterItem item)
+            {
+                MoveParameter(item, SelectedParameterItems, AvailableParameterItems);
+            }
+        }
+
+        private void MoveParameter(ParaExportParameterItem item, ObservableCollection<ParaExportParameterItem> source, ObservableCollection<ParaExportParameterItem> destination)
+        {
+            if (item != null)
+            {
+                source.Remove(item);
+                destination.Add(item);
+            }
+        }
+
         // New button event handlers for moving items
         private void btnMoveRight_Click(object sender, RoutedEventArgs e)
         {
@@ -779,7 +1264,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveUp_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             foreach (var item in selectedItems)
@@ -794,7 +1279,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveDown_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             for (int i = selectedItems.Count - 1; i >= 0; i--)
