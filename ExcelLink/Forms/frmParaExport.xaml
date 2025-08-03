@@ -11,8 +11,8 @@
 
     <Window.Resources>
         <Style x:Key="MainButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#4CAF50"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#E0E0E0"/>
+            <Setter Property="Foreground" Value="Black"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Height" Value="25"/>
@@ -20,12 +20,45 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="12">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#4CAF50"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CancelButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#E0E0E0"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Width" Value="70"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF4747"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -278,11 +311,13 @@
 
         <StackPanel Grid.Row="3" Orientation="Vertical" Margin="10,0,10,10">
             <Grid>
-                <ProgressBar x:Name="progressBar" Height="15" Margin="0,5,0,5" Visibility="Collapsed"
-                             Foreground="#4CAF50"/>
+                <ProgressBar x:Name="progressBar" Height="20" Margin="0,5,0,5" Visibility="Collapsed"
+                             Foreground="#4CAF50" Background="#E0E0E0"/>
                 <TextBlock x:Name="progressBarText" Text="0%" HorizontalAlignment="Center" VerticalAlignment="Center"
                            FontWeight="Bold" Visibility="Collapsed"/>
             </Grid>
+            <TextBlock x:Name="progressBarLabel" Text="" HorizontalAlignment="Center" 
+                       Margin="0,0,0,5" Visibility="Collapsed"/>
         </StackPanel>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,15,15">
@@ -297,10 +332,8 @@
                     Margin="0,0,10,0"
                     Click="btnImport_Click"/>
             <Button x:Name="btnCancel"
-                    Style="{StaticResource MainButtonStyle}"
+                    Style="{StaticResource CancelButtonStyle}"
                     Content="Cancel"
-                    Background="#E0E0E0"
-                    Foreground="Black"
                     Click="btnCancel_Click"/>
         </StackPanel>
     </Grid>

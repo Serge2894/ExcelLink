@@ -13,7 +13,7 @@ using Forms = System.Windows.Forms;
 using Excel = Microsoft.Office.Interop.Excel;
 using System.Drawing;
 using System.Text;
-using System.Threading.Tasks;
+using System.Windows.Threading;
 using ExcelLink.Common;
 using System.Reflection;
 
@@ -177,7 +177,7 @@ namespace ExcelLink.Forms
             string excelFile = saveDialog.FileName;
 
             // Show progress bar
-            ShowProgressBar();
+            ShowProgressBar("Preparing to export parameters...");
 
             Excel.Application excel = null;
             Excel.Workbook workbook = null;
@@ -279,6 +279,9 @@ namespace ExcelLink.Forms
                 int sheetIndex = 1;
                 foreach (var categoryItem in selectedCategories)
                 {
+                    UpdateProgressBar((int)((double)(sheetIndex - 1) / (selectedCategories.Count + 1) * 100),
+                        $"Processing category: {categoryItem.CategoryName}");
+
                     sheetIndex++;
                     // Create or get worksheet
                     if (workbook.Worksheets.Count < sheetIndex)
@@ -424,8 +427,20 @@ namespace ExcelLink.Forms
 
                     // Write element data
                     int row = 2;
+                    int elementCount = elements.Count;
+                    int elementIndex = 0;
+
                     foreach (Element element in elements)
                     {
+                        // Update progress for elements within category
+                        if (elementIndex % 10 == 0) // Update every 10 elements to avoid slowing down
+                        {
+                            int categoryProgress = (int)((double)(sheetIndex - 1) / (selectedCategories.Count + 1) * 100);
+                            int elementProgress = (int)((double)elementIndex / elementCount * 100 / (selectedCategories.Count + 1));
+                            UpdateProgressBar(categoryProgress + elementProgress,
+                                $"Processing {categoryItem.CategoryName}: Element {elementIndex + 1} of {elementCount}");
+                        }
+
                         // Write Element ID and color it grey (#D3D3D3) for Read-only
                         Excel.Range idCell = (Excel.Range)worksheet.Cells[row, 1];
                         idCell.Value2 = element.Id.IntegerValue.ToString();
@@ -521,12 +536,14 @@ namespace ExcelLink.Forms
                             dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
                         }
                         row++;
+                        elementIndex++;
                     }
 
                     // Auto-fit columns
                     worksheet.Columns.AutoFit();
 
-                    UpdateProgressBar((int)((double)sheetIndex / (selectedCategories.Count + 1) * 100));
+                    UpdateProgressBar((int)((double)sheetIndex / (selectedCategories.Count + 1) * 100),
+                        $"Completed processing {categoryItem.CategoryName}");
                 }
 
                 // Save the file
@@ -569,7 +586,7 @@ namespace ExcelLink.Forms
             string excelFile = openDialog.FileName;
 
             // Show progress bar
-            ShowProgressBar();
+            ShowProgressBar("Opening Excel file...");
 
             Excel.Application excel = null;
             Excel.Workbook workbook = null;
@@ -594,34 +611,67 @@ namespace ExcelLink.Forms
 
                 usedRange = worksheet.UsedRange;
 
-                // Get headers
+                // Get headers from the first row
                 List<string> headers = new List<string>();
+                Excel.Range headerRow = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, usedRange.Columns.Count]];
+
                 for (int j = 1; j <= usedRange.Columns.Count; j++)
                 {
-                    var headerCell = usedRange.Cells[1, j] as Excel.Range;
+                    var headerCell = headerRow.Cells[1, j] as Excel.Range;
                     if (headerCell != null && headerCell.Value2 != null)
                     {
-                        headers.Add(headerCell.Value2.ToString());
+                        string headerValue = headerCell.Value2.ToString();
+                        // Extract the parameter name from multi-line headers
+                        // Headers are in format: "ParameterName\n(Type)\nType: StorageType"
+                        string[] lines = headerValue.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (lines.Length > 0)
+                        {
+                            headers.Add(lines[0].Trim());
+                        }
+                        else
+                        {
+                            headers.Add(headerValue.Trim());
+                        }
                     }
                 }
 
-                int elementIdIndex = headers.IndexOf("ElementId");
+                // Find the Element ID column (case-insensitive)
+                int elementIdIndex = headers.FindIndex(h =>
+                    h.Equals("Element ID", StringComparison.OrdinalIgnoreCase) ||
+                    h.Equals("ElementId", StringComparison.OrdinalIgnoreCase));
+
                 if (elementIdIndex == -1)
                 {
-                    TaskDialog.Show("Error", "The Excel file must contain a column named 'ElementId'.");
+                    TaskDialog.Show("Error", "The Excel file must contain a column named 'Element ID' or 'ElementId'.");
                     return;
                 }
 
                 // Track errors for a summary
                 List<string> errorMessages = new List<string>();
 
+                UpdateProgressBar(10, "Reading Excel data...");
+
                 // Start Revit transaction
                 using (Transaction t = new Transaction(_doc, "Import Parameters from Excel"))
                 {
                     t.Start();
+
+                    int totalRows = usedRange.Rows.Count - 1; // Exclude header row
+                    int processedRows = 0;
+
                     // Loop through rows
                     for (int i = 2; i <= usedRange.Rows.Count; i++)
                     {
+                        processedRows++;
+
+                        // Update progress every 10 rows to avoid slowing down
+                        if (processedRows % 10 == 0 || processedRows == totalRows)
+                        {
+                            int progressPercentage = 10 + (int)((double)processedRows / totalRows * 80); // 10-90%
+                            UpdateProgressBar(progressPercentage,
+                                $"Importing parameters: Row {processedRows} of {totalRows}");
+                        }
+
                         var idCell = usedRange.Cells[i, elementIdIndex + 1] as Excel.Range;
 
                         // Handle potential non-numeric ElementId
@@ -648,13 +698,40 @@ namespace ExcelLink.Forms
                                 {
                                     string paramName = headers[j];
                                     var paramCell = usedRange.Cells[i, j + 1] as Excel.Range;
-                                    string paramValue = paramCell?.Value2?.ToString();
+
+                                    // Skip if cell is empty or has grey background (parameter doesn't exist)
+                                    if (paramCell == null || paramCell.Value2 == null)
+                                        continue;
+
+                                    // Check if cell has grey background color (#D3D3D3)
+                                    var cellColor = paramCell.Interior.Color;
+                                    var greyColor = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+                                    if (cellColor != null && (double)cellColor == (double)greyColor)
+                                        continue;
+
+                                    string paramValue = paramCell.Value2.ToString();
 
                                     if (!string.IsNullOrEmpty(paramValue))
                                     {
                                         try
                                         {
-                                            Utils.SetParameterValue(element, paramName, paramValue);
+                                            // Try to set instance parameter first
+                                            bool success = Utils.SetParameterValue(element, paramName, paramValue);
+
+                                            // If failed, try to set type parameter
+                                            if (!success)
+                                            {
+                                                Element typeElem = _doc.GetElement(element.GetTypeId());
+                                                if (typeElem != null)
+                                                {
+                                                    success = Utils.SetParameterValue(typeElem, paramName, paramValue);
+                                                }
+                                            }
+
+                                            if (!success)
+                                            {
+                                                errorMessages.Add($"Row {i}: Failed to set parameter '{paramName}' with value '{paramValue}'. Parameter may be read-only or not exist.");
+                                            }
                                         }
                                         catch (Exception ex)
                                         {
@@ -668,10 +745,11 @@ namespace ExcelLink.Forms
                         {
                             errorMessages.Add($"Row {i}: Element with ID '{elementIdInt}' not found in model. Skipping row.");
                         }
-                        UpdateProgressBar((int)((double)(i - 1) / (usedRange.Rows.Count - 1) * 100));
                     }
                     t.Commit();
                 }
+
+                UpdateProgressBar(100, "Import completed!");
 
                 if (errorMessages.Any())
                 {
@@ -707,18 +785,61 @@ namespace ExcelLink.Forms
         {
             progressBar.Value = percentage;
             progressBarText.Text = $"{percentage}%";
+            DoEvents();
+        }
+
+        public void UpdateProgressBar(int percentage, string message)
+        {
+            progressBar.Value = percentage;
+            progressBarText.Text = $"{percentage}%";
+            progressBarLabel.Text = message;
+            DoEvents();
         }
 
         public void ShowProgressBar()
         {
             progressBar.Visibility = System.Windows.Visibility.Visible;
             progressBarText.Visibility = System.Windows.Visibility.Visible;
+            progressBarLabel.Visibility = System.Windows.Visibility.Visible;
+            progressBar.Value = 0;
+            progressBarText.Text = "0%";
+            DoEvents();
+        }
+
+        public void ShowProgressBar(string message)
+        {
+            ShowProgressBar();
+            progressBarLabel.Text = message;
+            DoEvents();
         }
 
         public void HideProgressBar()
         {
             progressBar.Visibility = System.Windows.Visibility.Collapsed;
             progressBarText.Visibility = System.Windows.Visibility.Collapsed;
+            progressBarLabel.Visibility = System.Windows.Visibility.Collapsed;
+            progressBarLabel.Text = "";
+        }
+
+        // Helper method to process UI events
+        private void DoEvents()
+        {
+            // Create a new temporary message processing loop (DispatcherFrame)
+            DispatcherFrame frame = new DispatcherFrame();
+
+            // Schedule a low-priority callback that will terminate the temporary loop
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,
+                new DispatcherOperationCallback(ExitFrame), frame);
+
+            // Start processing messages in this temporary loop
+            Dispatcher.PushFrame(frame);
+        }
+
+        private object ExitFrame(object frame)
+        {
+            // Set the Continue property to false, which will cause PushFrame to return
+            ((DispatcherFrame)frame).Continue = false;
+            return null;
         }
 
         private void rbEntireModel_Checked(object sender, RoutedEventArgs e)
@@ -1264,7 +1385,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveUp_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             foreach (var item in selectedItems)
@@ -1279,7 +1400,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveDown_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             for (int i = selectedItems.Count - 1; i >= 0; i--)
