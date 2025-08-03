@@ -4,41 +4,88 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Height="600" Width="900" MinWidth="900" MinHeight="600"
+        Height="600" Width="1200" MinWidth="900" MinHeight="600"
         Background="#F5F5F5"
         WindowStyle="None"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
-        <Style x:Key="TabButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#E0E0E0"/>
-            <Setter Property="BorderThickness" Value="0"/>
+        <Style x:Key="MainButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#4CAF50"/>
+            <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="Padding" Value="10,3"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Width" Value="70"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                Padding="{TemplateBinding Padding}"
-                                CornerRadius="5">
+                                CornerRadius="12">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#F0F0F0"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#D0D0D0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#E0E0E0"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Margin" Value="0,5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ColoredListViewItemStyle" TargetType="ListViewItem">
+            <Setter Property="Background" Value="{Binding ParameterColor}"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{x:Static SystemColors.HighlightBrush}"/>
+                    <Setter Property="Foreground" Value="{x:Static SystemColors.HighlightTextBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="ParameterItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding ParameterName}" Margin="2"
+                           FontWeight="{Binding FontWeight}"
+                           Foreground="{Binding TextColor}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CategoryItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                          Content="{Binding CategoryName}"
+                          Margin="2"
+                          FontWeight="{Binding FontWeight}"
+                          Foreground="{Binding TextColor}"
+                          Checked="CategoryCheckBox_Changed"
+                          Unchecked="CategoryCheckBox_Changed"/>
+            </StackPanel>
+        </DataTemplate>
+
     </Window.Resources>
 
     <Grid>
@@ -47,240 +94,208 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Title Bar -->
         <Border Grid.Row="0" Background="#DDD" Padding="5" MouseDown="Border_MouseDown">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Parameter Export/Import" FontWeight="Bold" FontSize="14" 
+                <TextBlock Text="Parameter Export/Import" FontWeight="Bold" FontSize="14"
                           VerticalAlignment="Center" HorizontalAlignment="Left" />
                 <Button Grid.Column="1" Content="X" Width="25" Height="25" Padding="0"
-                        FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
+                      FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnClose_Click"/>
             </Grid>
         </Border>
 
-        <!-- Scope Selection -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10,10,0,10">
-            <RadioButton x:Name="rbEntireModel" Content="Entire Model" IsChecked="True" 
-                        Margin="0,0,10,0" GroupName="ViewFilter" Checked="rbEntireModel_Checked"/>
-            <RadioButton x:Name="rbActiveView" Content="Active View" GroupName="ViewFilter" 
+            <RadioButton x:Name="rbEntireModel" Content="Entire Model" IsChecked="True"
+                       Margin="0,0,10,0" GroupName="ViewFilter" Checked="rbEntireModel_Checked"/>
+            <RadioButton x:Name="rbActiveView" Content="Active View" GroupName="ViewFilter"
                         Checked="rbActiveView_Checked"/>
         </StackPanel>
 
-        <!-- Main Content Area -->
         <Grid Grid.Row="2" Margin="10,0,10,10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" MinWidth="300"/>
-                <ColumnDefinition Width="1*" MinWidth="300"/>
+                <ColumnDefinition Width="1*" MinWidth="150"/>
+                <ColumnDefinition Width="1*" MinWidth="150"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="1*" MinWidth="150"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Categories Section -->
-            <Border Grid.Column="0" Background="#FFFFFF" CornerRadius="5" Margin="0,0,5,0">
-                <Grid Margin="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+            <Grid Grid.Column="0" Margin="0,0,5,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Label Content="Select Categories:" Grid.Row="0" FontWeight="Bold" Background="#E0E0E0"/>
+                <TextBox x:Name="txtCategorySearch"
+                         Grid.Row="1"
+                         Margin="0,5,0,5"
+                         Padding="5,3"
+                         TextChanged="txtCategorySearch_TextChanged"
+                         GotFocus="txtCategorySearch_GotFocus"
+                         LostFocus="txtCategorySearch_LostFocus"
+                         Text="Search categories...">
+                    <TextBox.Resources>
+                        <Style TargetType="{x:Type TextBox}">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type TextBox}">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="#CCCCCC"
+                                                BorderThickness="1"
+                                                CornerRadius="5">
+                                            <ScrollViewer x:Name="PART_ContentHost"
+                                                          Margin="{TemplateBinding Padding}"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TextBox.Resources>
+                </TextBox>
+                <Border Grid.Row="2"
+                        BorderThickness="1"
+                        BorderBrush="#CCCCCC"
+                        Background="White"
+                        CornerRadius="5">
+                    <ListView x:Name="lvCategories"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              SelectionMode="Extended"
+                              ItemTemplate="{StaticResource CategoryItemTemplate}">
+                    </ListView>
+                </Border>
+            </Grid>
 
-                    <Label Content="Select Categories:" Grid.Row="0" FontWeight="Bold"/>
+            <Grid Grid.Column="1" Margin="5,0,5,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Label Content="Available Parameters:" Grid.Row="0" FontWeight="Bold" Background="#E0E0E0"/>
+                <TextBox x:Name="txtParameterSearch"
+                         Grid.Row="1"
+                         Margin="0,5,0,5"
+                         Padding="5,3"
+                         TextChanged="txtParameterSearch_TextChanged"
+                         GotFocus="txtParameterSearch_GotFocus"
+                         LostFocus="txtParameterSearch_LostFocus"
+                         Text="Search parameters...">
+                    <TextBox.Resources>
+                        <Style TargetType="{x:Type TextBox}">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type TextBox}">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="#CCCCCC"
+                                                BorderThickness="1"
+                                                CornerRadius="5">
+                                            <ScrollViewer x:Name="PART_ContentHost"
+                                                        Margin="{TemplateBinding Padding}"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TextBox.Resources>
+                </TextBox>
+                <Border Grid.Row="2"
+                        BorderThickness="1"
+                        BorderBrush="#CCCCCC"
+                        Background="White"
+                        CornerRadius="5">
+                    <ListView x:Name="lvAvailableParameters"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              SelectionMode="Multiple"
+                              ItemTemplate="{StaticResource ParameterItemTemplate}"
+                              ItemContainerStyle="{StaticResource ColoredListViewItemStyle}">
+                    </ListView>
+                </Border>
+                <StackPanel Grid.Row="3" Margin="0,5,0,0">
+                    <TextBlock Text="Color Legend:" FontWeight="Bold"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <Border Width="20" Height="20" Background="#80FF4747" BorderBrush="Black" BorderThickness="1"/>
+                        <TextBlock Text="Read-only" Margin="5,0,10,0" VerticalAlignment="Center"/>
+                        <Border Width="20" Height="20" Background="#80FFE699" BorderBrush="Black" BorderThickness="1"/>
+                        <TextBlock Text="Type Parameter" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
 
-                    <TextBox x:Name="txtCategorySearch" 
-                             Grid.Row="1"
-                             Margin="0,5,0,5"
-                             Padding="5,3"
-                             TextChanged="txtCategorySearch_TextChanged"
-                             GotFocus="txtCategorySearch_GotFocus"
-                             LostFocus="txtCategorySearch_LostFocus"
-                             Text="Search categories...">
-                        <TextBox.Resources>
-                            <Style TargetType="{x:Type TextBox}">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="{x:Type TextBox}">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="#CCCCCC"
-                                                    BorderThickness="1"
-                                                    CornerRadius="5">
-                                                <ScrollViewer x:Name="PART_ContentHost" 
-                                                            Margin="{TemplateBinding Padding}"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </TextBox.Resources>
-                    </TextBox>
+            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="5,0,5,0">
+                <Button x:Name="btnMoveRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;" Click="btnMoveRight_Click"/>
+                <Button x:Name="btnMoveAllRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;&gt;" Click="btnMoveAllRight_Click"/>
+                <Button x:Name="btnMoveAllLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;&lt;" Click="btnMoveAllLeft_Click"/>
+                <Button x:Name="btnMoveLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;" Click="btnMoveLeft_Click"/>
+                <Button x:Name="btnMoveUp" Style="{StaticResource ActionButtonStyle}" Content="▲" Click="btnMoveUp_Click"/>
+                <Button x:Name="btnMoveDown" Style="{StaticResource ActionButtonStyle}" Content="▼" Click="btnMoveDown_Click"/>
+            </StackPanel>
 
-                    <Border Grid.Row="2" 
-                            BorderThickness="1" 
-                            BorderBrush="#CCCCCC" 
+            <Grid Grid.Column="3" Margin="5,0,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Label Content="Selected Parameters:" Grid.Row="0" FontWeight="Bold" Background="#E0E0E0"/>
+                <Grid Grid.Row="1">
+                    <Border Grid.Column="0"
+                            BorderThickness="1"
+                            BorderBrush="#CCCCCC"
                             Background="White"
                             CornerRadius="5">
-                        <ListView x:Name="lvCategories" 
+                        <ListView x:Name="lvSelectedParameters"
                                   Background="Transparent"
                                   BorderThickness="0"
                                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                  SelectionMode="Extended">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" 
-                                                 Content="{Binding CategoryName}"
-                                                 Margin="2"
-                                                 FontWeight="{Binding FontWeight}"
-                                                 Foreground="{Binding TextColor}"
-                                                 Checked="CategoryCheckBox_Changed"
-                                                 Unchecked="CategoryCheckBox_Changed"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
+                                  SelectionMode="Multiple"
+                                  ItemTemplate="{StaticResource ParameterItemTemplate}"
+                                  ItemContainerStyle="{StaticResource ColoredListViewItemStyle}">
                         </ListView>
                     </Border>
                 </Grid>
-            </Border>
-
-            <!-- Parameters Section -->
-            <Border Grid.Column="1" Background="#FFFFFF" CornerRadius="5" Margin="5,0,0,0">
-                <Grid Margin="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <Label Content="Select Parameters:" Grid.Row="0" FontWeight="Bold"/>
-
-                    <TextBox x:Name="txtParameterSearch" 
-                             Grid.Row="1"
-                             Margin="0,5,0,5"
-                             Padding="5,3"
-                             TextChanged="txtParameterSearch_TextChanged"
-                             GotFocus="txtParameterSearch_GotFocus"
-                             LostFocus="txtParameterSearch_LostFocus"
-                             Text="Search parameters...">
-                        <TextBox.Resources>
-                            <Style TargetType="{x:Type TextBox}">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="{x:Type TextBox}">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="#CCCCCC"
-                                                    BorderThickness="1"
-                                                    CornerRadius="5">
-                                                <ScrollViewer x:Name="PART_ContentHost" 
-                                                            Margin="{TemplateBinding Padding}"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </TextBox.Resources>
-                    </TextBox>
-
-                    <Border Grid.Row="2" 
-                            BorderThickness="1" 
-                            BorderBrush="#CCCCCC" 
-                            Background="White"
-                            CornerRadius="5">
-                        <ListView x:Name="lvParameters" 
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                  SelectionMode="Extended">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" 
-                                                 Content="{Binding ParameterName}"
-                                                 Margin="2"
-                                                 FontWeight="{Binding FontWeight}"
-                                                 Foreground="{Binding TextColor}"
-                                                 Checked="ParameterCheckBox_Changed"
-                                                 Unchecked="ParameterCheckBox_Changed"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                    </Border>
-                </Grid>
-            </Border>
+            </Grid>
         </Grid>
 
-        <!-- Button Area -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,15,15">
+        <StackPanel Grid.Row="3" Orientation="Vertical" Margin="10,0,10,10">
+            <Grid>
+                <ProgressBar x:Name="progressBar" Height="15" Margin="0,5,0,5" Visibility="Collapsed"
+                             Foreground="#4CAF50"/>
+                <TextBlock x:Name="progressBarText" Text="0%" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontWeight="Bold" Visibility="Collapsed"/>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,15,15">
             <Button x:Name="btnExport"
+                    Style="{StaticResource MainButtonStyle}"
                     Content="Export"
-                    Height="25"
-                    Width="70"
                     Margin="0,0,10,0"
-                    Background="#4CAF50"
-                    Foreground="White"
-                    BorderBrush="Transparent"
-                    FontWeight="Bold"
-                    Click="btnExport_Click">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
+                    Click="btnExport_Click"/>
             <Button x:Name="btnImport"
+                    Style="{StaticResource MainButtonStyle}"
                     Content="Import"
-                    Height="25"
-                    Width="70"
                     Margin="0,0,10,0"
-                    Background="#2196F3"
-                    Foreground="White"
-                    BorderBrush="Transparent"
-                    FontWeight="Bold"
-                    Click="btnImport_Click">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
+                    Click="btnImport_Click"/>
             <Button x:Name="btnCancel"
+                    Style="{StaticResource MainButtonStyle}"
                     Content="Cancel"
-                    Height="25"
-                    Width="70"
                     Background="#E0E0E0"
                     Foreground="Black"
-                    BorderBrush="Transparent"
-                    FontWeight="Bold"
-                    Click="btnCancel_Click">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
+                    Click="btnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>
