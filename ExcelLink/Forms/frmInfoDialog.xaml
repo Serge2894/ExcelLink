@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ExcelLink.Forms"
         mc:Ignorable="d"
-        Height="200" Width="300" MinWidth="300" MinHeight="200"
+        Height="200" Width="350" MinWidth="350" MinHeight="200"
         Background="#F5F5F5"
         WindowStyle="None"
         WindowStartupLocation="CenterScreen"

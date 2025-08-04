@@ -260,7 +260,6 @@ namespace ExcelLink.Common
             if (paramName == "Family") return BuiltInParameter.ELEM_FAMILY_PARAM;
             if (paramName == "Family and Type") return BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM;
             if (paramName == "Type") return BuiltInParameter.ELEM_TYPE_PARAM;
-            if (paramName == "Type Name") return BuiltInParameter.SYMBOL_NAME_PARAM;
             if (paramName == "Description") return BuiltInParameter.ALL_MODEL_DESCRIPTION;
             if (paramName == "Manufacturer") return BuiltInParameter.ALL_MODEL_MANUFACTURER;
             if (paramName == "Model") return BuiltInParameter.ALL_MODEL_MODEL;

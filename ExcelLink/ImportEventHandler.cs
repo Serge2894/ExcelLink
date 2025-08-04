@@ -73,10 +73,10 @@ namespace ExcelLink.Common
                     }
                 }
 
-                List<string> errorMessages = new List<string>();
-                List<string> successMessages = new List<string>();
+                List<ImportErrorItem> errorMessages = new List<ImportErrorItem>();
                 int totalRows = usedRange.Rows.Count - 1; // Exclude header row
                 int processedRows = 0;
+                int updatedElementsCount = 0;
 
                 using (Transaction t = new Transaction(_doc, "Import Parameters from Excel"))
                 {
@@ -93,7 +93,7 @@ namespace ExcelLink.Common
 
                         if (!int.TryParse(idString, out elementIdInt))
                         {
-                            errorMessages.Add($"Row {i}: Invalid ElementId '{idString}'");
+                            errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Invalid ElementId '{idString}'" });
                             continue;
                         }
 
@@ -102,7 +102,7 @@ namespace ExcelLink.Common
 
                         if (element != null)
                         {
-                            int updatedParams = 0;
+                            bool elementUpdated = false;
 
                             for (int j = 0; j < headers.Count; j++)
                             {
@@ -128,11 +128,9 @@ namespace ExcelLink.Common
 
                                 try
                                 {
-                                    // First try to get instance parameter
                                     Parameter param = element.LookupParameter(paramName);
                                     Element targetElement = element;
 
-                                    // If not found, try type parameter
                                     if (param == null)
                                     {
                                         Element typeElem = _doc.GetElement(element.GetTypeId());
@@ -143,7 +141,6 @@ namespace ExcelLink.Common
                                         }
                                     }
 
-                                    // If still not found, try built-in parameter
                                     if (param == null)
                                     {
                                         BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
@@ -166,7 +163,6 @@ namespace ExcelLink.Common
 
                                     if (param != null && !param.IsReadOnly)
                                     {
-                                        // Get current value to check if it's different
                                         string currentValue = Utils.GetParameterValue(targetElement, paramName);
 
                                         if (currentValue != paramValue)
@@ -174,29 +170,28 @@ namespace ExcelLink.Common
                                             bool success = Utils.SetParameterValue(targetElement, paramName, paramValue);
                                             if (success)
                                             {
-                                                updatedParams++;
+                                                elementUpdated = true;
                                             }
                                             else
                                             {
-                                                errorMessages.Add($"Row {i}: Failed to set parameter '{paramName}' to '{paramValue}'");
+                                                errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}' with value '{paramValue}'" });
                                             }
                                         }
                                     }
                                 }
                                 catch (Exception ex)
                                 {
-                                    errorMessages.Add($"Row {i}: Error with parameter '{paramName}': {ex.Message}");
+                                    errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}': {ex.Message}" });
                                 }
                             }
-
-                            if (updatedParams > 0)
+                            if (elementUpdated)
                             {
-                                successMessages.Add($"Element {elementIdInt}: Updated {updatedParams} parameter(s)");
+                                updatedElementsCount++;
                             }
                         }
                         else
                         {
-                            errorMessages.Add($"Row {i}: Element ID {elementIdInt} not found in model");
+                            errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = "Element ID not found in model" });
                         }
 
                         processedRows++;
@@ -209,56 +204,33 @@ namespace ExcelLink.Common
 
                 _form.Dispatcher.Invoke(() => _form.HideProgressBar());
 
-                // Show info dialog
-                _form.Dispatcher.Invoke(() =>
-                {
-                    frmInfoDialog infoDialog = new frmInfoDialog("Model updated successfully");
-                    infoDialog.ShowDialog();
-                });
-
-                // Show detailed results
-                string message = "";
-
-                if (successMessages.Any())
-                {
-                    message = $"Import completed successfully!\n\n";
-                    message += $"Updated elements: {successMessages.Count}\n";
-
-                    if (successMessages.Count <= 10)
-                    {
-                        message += "\nDetails:\n" + string.Join("\n", successMessages);
-                    }
-                    else
-                    {
-                        message += "\nDetails:\n" + string.Join("\n", successMessages.Take(5));
-                        message += $"\n... and {successMessages.Count - 5} more elements";
-                    }
-                }
-
                 if (errorMessages.Any())
                 {
-                    if (string.IsNullOrEmpty(message))
+                    // Show custom form with errors
+                    _form.Dispatcher.Invoke(() =>
                     {
-                        message = "Import completed with errors:\n\n";
-                    }
-                    else
-                    {
-                        message += "\n\nErrors encountered:\n";
-                    }
-
-                    message += string.Join("\n", errorMessages.Take(10));
-                    if (errorMessages.Count > 10)
-                    {
-                        message += $"\n... and {errorMessages.Count - 10} more errors";
-                    }
+                        var failForm = new frmImportFailed(errorMessages);
+                        failForm.ShowDialog();
+                    });
                 }
-
-                if (string.IsNullOrEmpty(message))
+                else if (updatedElementsCount > 0)
                 {
-                    message = "Import completed. No parameters were updated (all values may already be up to date).";
+                    // Show info dialog for success as requested
+                    _form.Dispatcher.Invoke(() =>
+                    {
+                        frmInfoDialog infoDialog = new frmInfoDialog("Model updated successfully");
+                        infoDialog.ShowDialog();
+                    });
                 }
-
-                TaskDialog.Show("Import Results", message);
+                else
+                {
+                    // Show info dialog if no parameters were updated
+                    _form.Dispatcher.Invoke(() =>
+                    {
+                        frmInfoDialog infoDialog = new frmInfoDialog("Import completed. \nNo parameters were updated.");
+                        infoDialog.ShowDialog();
+                    });
+                }
             }
             catch (Exception ex)
             {

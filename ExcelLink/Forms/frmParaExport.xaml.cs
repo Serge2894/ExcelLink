@@ -16,6 +16,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ExcelLink.Common;
 using System.Reflection;
+using System.Globalization;
 
 namespace ExcelLink.Forms
 {
@@ -150,13 +151,15 @@ namespace ExcelLink.Forms
             // Validate selections
             if (!SelectedCategoryNames.Any())
             {
-                TaskDialog.Show("Error", "Please select at least one category.");
+                frmInfoDialog infoDialog = new frmInfoDialog("Please select at least one category.");
+                infoDialog.ShowDialog();
                 return;
             }
 
             if (!SelectedParameterNames.Any())
             {
-                TaskDialog.Show("Error", "Please select at least one parameter.");
+                frmInfoDialog infoDialog = new frmInfoDialog("Please select at least one parameter.");
+                infoDialog.ShowDialog();
                 return;
             }
 
@@ -179,8 +182,8 @@ namespace ExcelLink.Forms
 
             string excelFile = saveDialog.FileName;
 
-            // Show progress bar
-            ShowProgressBar();
+            // Show progress bar on the UI thread
+            Dispatcher.Invoke(() => ShowProgressBar());
 
             Excel.Application excel = null;
             Excel.Workbook workbook = null;
@@ -284,6 +287,7 @@ namespace ExcelLink.Forms
 
                 // Process each category
                 int sheetIndex = 1;
+                int totalCategories = selectedCategories.Count;
                 foreach (var categoryItem in selectedCategories)
                 {
                     sheetIndex++;
@@ -423,6 +427,8 @@ namespace ExcelLink.Forms
                     dataCollector.WhereElementIsNotElementType();
                     List<Element> elements = dataCollector.ToList();
 
+                    int totalElements = elements.Count;
+                    int processedElements = 0;
                     int row = 2;
                     foreach (Element element in elements)
                     {
@@ -488,7 +494,7 @@ namespace ExcelLink.Forms
                             if (param != null)
                             {
                                 dataCell.Value2 = value;
-                                if (paramName == "Family" || paramName == "Family and Type")
+                                if (paramName == "Family" || paramName == "Family and Type" || paramName == "Type")
                                 {
                                     dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
                                 }
@@ -510,33 +516,72 @@ namespace ExcelLink.Forms
                             dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
                         }
                         row++;
+                        processedElements++;
+
+                        // Update progress bar gradually
+                        int overallPercentage = (int)(((double)(sheetIndex - 1) + ((double)processedElements / totalElements)) / totalCategories * 100);
+                        Dispatcher.Invoke(() => UpdateProgressBar(overallPercentage));
                     }
 
                     worksheet.Columns.AutoFit();
-                    UpdateProgressBar((int)((double)sheetIndex / (selectedCategories.Count + 1) * 100));
                 }
 
+                // Suppress Excel's alerts to prevent the overwrite prompt
+                excel.DisplayAlerts = false;
+
                 workbook.SaveAs(excelFile);
+
+                // Re-enable Excel's alerts
+                excel.DisplayAlerts = true;
 
                 colorLegendSheet.Activate();
 
                 // Show 100% progress
-                UpdateProgressBar(100);
+                Dispatcher.Invoke(() => UpdateProgressBar(100));
 
                 // Show info dialog
-                frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
-                infoDialog.ShowDialog();
+                Dispatcher.Invoke(() => {
+                    frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
+                    infoDialog.ShowDialog();
+                });
 
                 // Open Excel
                 excel.Visible = true;
             }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                // Handle the specific case where the file is open
+                // HRESULT 0x800A03EC corresponds to an Excel error
+                if (ex.HResult == unchecked((int)0x800A03EC))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        frmInfoDialog infoDialog = new frmInfoDialog("The Excel file is already open.\nPlease close it and try again.");
+                        infoDialog.ShowDialog();
+                    });
+                }
+                else
+                {
+                    // Re-enable alerts in case of an unknown error
+                    if (excel != null)
+                    {
+                        excel.DisplayAlerts = true;
+                    }
+                    TaskDialog.Show("Error", $"Failed to export parameters:\n{ex.Message}");
+                }
+            }
             catch (Exception ex)
             {
+                // Re-enable alerts in case of an unknown error
+                if (excel != null)
+                {
+                    excel.DisplayAlerts = true;
+                }
                 TaskDialog.Show("Error", $"Failed to export parameters:\n{ex.Message}");
             }
             finally
             {
-                HideProgressBar();
+                Dispatcher.Invoke(() => HideProgressBar());
                 if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
                 if (colorLegendSheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(colorLegendSheet);
                 if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
@@ -567,11 +612,21 @@ namespace ExcelLink.Forms
         public void UpdateProgressBar(int percentage)
         {
             // Calculate the width based on the container width
-            var containerWidth = (this.ActualWidth - 240); // Approximate width minus buttons and margins
-            if (containerWidth < 100) containerWidth = 300; // Minimum width
+            double containerWidth = progressBarContainer.ActualWidth;
+            if (containerWidth <= 0) return;
 
             var fillWidth = (containerWidth * percentage) / 100.0;
             progressBarFill.Width = fillWidth;
+
+            // Set the corner radius. Right side is rounded only at 100%.
+            if (percentage == 100)
+            {
+                progressBarFill.CornerRadius = new CornerRadius(12.5);
+            }
+            else
+            {
+                progressBarFill.CornerRadius = new CornerRadius(12.5, 0, 0, 12.5);
+            }
 
             if (percentage > 0)
             {
@@ -586,12 +641,14 @@ namespace ExcelLink.Forms
         public void ShowProgressBar()
         {
             progressBarFill.Width = 0;
+            progressBarFill.CornerRadius = new CornerRadius(12.5, 0, 0, 12.5);
             progressBarText.Text = "Processing...";
         }
 
         public void HideProgressBar()
         {
             progressBarFill.Width = 0;
+            progressBarFill.CornerRadius = new CornerRadius(12.5, 0, 0, 12.5);
             progressBarText.Text = "Ready";
         }
 
@@ -707,7 +764,6 @@ namespace ExcelLink.Forms
                 { "Family", BuiltInParameter.ELEM_FAMILY_PARAM },
                 { "Family and Type", BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM },
                 { "Type", BuiltInParameter.ELEM_TYPE_PARAM },
-                { "Type Name", BuiltInParameter.SYMBOL_NAME_PARAM },
                 { "Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS },
                 { "Type Comments", BuiltInParameter.ALL_MODEL_TYPE_COMMENTS },
                 { "Mark", BuiltInParameter.ALL_MODEL_MARK },
@@ -892,6 +948,13 @@ namespace ExcelLink.Forms
                 {
                     bool isReadOnly = isReadOnlyMap.ContainsKey(paramName) && isReadOnlyMap[paramName];
                     bool isTypeParam = isTypeParamMap.ContainsKey(paramName) && isTypeParamMap[paramName];
+
+                    // Make the "Type" and "Family and Type" parameter read-only
+                    if (paramName == "Type" || paramName == "Family and Type")
+                    {
+                        isReadOnly = true;
+                    }
+
                     AvailableParameterItems.Add(new ParaExportParameterItem(parameterMap[paramName], isReadOnly, isTypeParam));
                 }
             }
@@ -999,11 +1062,16 @@ namespace ExcelLink.Forms
                 source.Remove(item);
                 destination.Add(item);
 
-                // Clear search and refresh the view when using double-click
-                if (!string.IsNullOrWhiteSpace(txtParameterSearch.Text) && txtParameterSearch.Text != "Search parameters...")
+                // Re-apply the current search filter
+                string searchText = txtParameterSearch.Text.ToLower();
+                if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
                 {
-                    txtParameterSearch.Text = "Search parameters...";
                     lvAvailableParameters.ItemsSource = AvailableParameterItems;
+                }
+                else
+                {
+                    var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
+                    lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
                 }
             }
         }
@@ -1021,11 +1089,16 @@ namespace ExcelLink.Forms
                 }
             }
 
-            // Clear search and refresh the view
-            if (!string.IsNullOrWhiteSpace(txtParameterSearch.Text) && txtParameterSearch.Text != "Search parameters...")
+            // Re-apply the current search filter
+            string searchText = txtParameterSearch.Text.ToLower();
+            if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
             {
-                txtParameterSearch.Text = "Search parameters...";
                 lvAvailableParameters.ItemsSource = AvailableParameterItems;
+            }
+            else
+            {
+                var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
+                lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
             }
         }
 
@@ -1042,11 +1115,16 @@ namespace ExcelLink.Forms
                 }
             }
 
-            // Clear search and refresh the view
-            if (!string.IsNullOrWhiteSpace(txtParameterSearch.Text) && txtParameterSearch.Text != "Search parameters...")
+            // Re-apply the current search filter
+            string searchText = txtParameterSearch.Text.ToLower();
+            if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
             {
-                txtParameterSearch.Text = "Search parameters...";
                 lvAvailableParameters.ItemsSource = AvailableParameterItems;
+            }
+            else
+            {
+                var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
+                lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
             }
         }
 
