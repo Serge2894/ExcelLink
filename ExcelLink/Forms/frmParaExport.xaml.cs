@@ -145,7 +145,6 @@ namespace ExcelLink.Forms
         {
             ImportFromExcel();
         }
-
         private void ExportToExcel()
         {
             // Validate selections
@@ -309,7 +308,6 @@ namespace ExcelLink.Forms
                     elementIdHeader.ColumnWidth = 12;
 
                     List<string> selectedParameters = SelectedParameterNames;
-
                     for (int i = 0; i < selectedParameters.Count; i++)
                     {
                         string paramName = selectedParameters[i];
@@ -521,9 +519,16 @@ namespace ExcelLink.Forms
                 workbook.SaveAs(excelFile);
 
                 colorLegendSheet.Activate();
-                excel.Visible = true;
 
-                TaskDialog.Show("Success", "Export completed successfully!");
+                // Show 100% progress
+                UpdateProgressBar(100);
+
+                // Show info dialog
+                frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
+                infoDialog.ShowDialog();
+
+                // Open Excel
+                excel.Visible = true;
             }
             catch (Exception ex)
             {
@@ -695,7 +700,6 @@ namespace ExcelLink.Forms
 
             return finalCategories;
         }
-
         private void AddSpecificBuiltInParameters(Element element, HashSet<string> parameterNames, Dictionary<string, Parameter> parameterMap)
         {
             var builtInParamsToCheck = new Dictionary<string, BuiltInParameter>
@@ -994,6 +998,13 @@ namespace ExcelLink.Forms
             {
                 source.Remove(item);
                 destination.Add(item);
+
+                // Clear search and refresh the view when using double-click
+                if (!string.IsNullOrWhiteSpace(txtParameterSearch.Text) && txtParameterSearch.Text != "Search parameters...")
+                {
+                    txtParameterSearch.Text = "Search parameters...";
+                    lvAvailableParameters.ItemsSource = AvailableParameterItems;
+                }
             }
         }
 
@@ -1009,6 +1020,13 @@ namespace ExcelLink.Forms
                     SelectedParameterItems.Add(item);
                 }
             }
+
+            // Clear search and refresh the view
+            if (!string.IsNullOrWhiteSpace(txtParameterSearch.Text) && txtParameterSearch.Text != "Search parameters...")
+            {
+                txtParameterSearch.Text = "Search parameters...";
+                lvAvailableParameters.ItemsSource = AvailableParameterItems;
+            }
         }
 
         private void btnMoveLeft_Click(object sender, RoutedEventArgs e)
@@ -1022,6 +1040,13 @@ namespace ExcelLink.Forms
                     SelectedParameterItems.Remove(item);
                     AvailableParameterItems.Add(item);
                 }
+            }
+
+            // Clear search and refresh the view
+            if (!string.IsNullOrWhiteSpace(txtParameterSearch.Text) && txtParameterSearch.Text != "Search parameters...")
+            {
+                txtParameterSearch.Text = "Search parameters...";
+                lvAvailableParameters.ItemsSource = AvailableParameterItems;
             }
         }
 

@@ -209,7 +209,14 @@ namespace ExcelLink.Common
 
                 _form.Dispatcher.Invoke(() => _form.HideProgressBar());
 
-                // Show results
+                // Show info dialog
+                _form.Dispatcher.Invoke(() =>
+                {
+                    frmInfoDialog infoDialog = new frmInfoDialog("Model updated successfully");
+                    infoDialog.ShowDialog();
+                });
+
+                // Show detailed results
                 string message = "";
 
                 if (successMessages.Any())
