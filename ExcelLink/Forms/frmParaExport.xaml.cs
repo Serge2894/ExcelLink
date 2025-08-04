@@ -561,23 +561,33 @@ namespace ExcelLink.Forms
 
         public void UpdateProgressBar(int percentage)
         {
-            progressBar.Value = percentage;
-            progressBarText.Text = $"{percentage}%";
+            // Calculate the width based on the container width
+            var containerWidth = (this.ActualWidth - 240); // Approximate width minus buttons and margins
+            if (containerWidth < 100) containerWidth = 300; // Minimum width
+
+            var fillWidth = (containerWidth * percentage) / 100.0;
+            progressBarFill.Width = fillWidth;
+
+            if (percentage > 0)
+            {
+                progressBarText.Text = $"{percentage}%";
+            }
+            else
+            {
+                progressBarText.Text = "Processing...";
+            }
         }
 
         public void ShowProgressBar()
         {
-            progressBar.Visibility = System.Windows.Visibility.Visible;
-            progressBarText.Visibility = System.Windows.Visibility.Visible;
-            progressBarLabel.Visibility = System.Windows.Visibility.Visible;
-            progressBarLabel.Text = "Processing...";
+            progressBarFill.Width = 0;
+            progressBarText.Text = "Processing...";
         }
 
         public void HideProgressBar()
         {
-            progressBar.Visibility = System.Windows.Visibility.Collapsed;
-            progressBarText.Visibility = System.Windows.Visibility.Collapsed;
-            progressBarLabel.Visibility = System.Windows.Visibility.Collapsed;
+            progressBarFill.Width = 0;
+            progressBarText.Text = "Ready";
         }
 
         private void rbEntireModel_Checked(object sender, RoutedEventArgs e)
@@ -659,7 +669,31 @@ namespace ExcelLink.Forms
                            !c.Name.ToLower().Contains("sketch"))
                 .ToList();
 
-            return modelCategories;
+            // Additional check for Rooms category - ensure there are actual room elements
+            var finalCategories = new List<Category>();
+            foreach (var category in modelCategories)
+            {
+                FilteredElementCollector catCollector;
+                if (IsEntireModelChecked)
+                {
+                    catCollector = new FilteredElementCollector(_doc);
+                }
+                else
+                {
+                    catCollector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                }
+
+                catCollector.OfCategoryId(category.Id);
+                catCollector.WhereElementIsNotElementType();
+
+                // Only add category if it has at least one element
+                if (catCollector.GetElementCount() > 0)
+                {
+                    finalCategories.Add(category);
+                }
+            }
+
+            return finalCategories;
         }
 
         private void AddSpecificBuiltInParameters(Element element, HashSet<string> parameterNames, Dictionary<string, Parameter> parameterMap)
