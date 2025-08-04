@@ -25,6 +25,8 @@ namespace ExcelLink.Forms
     public partial class frmParaExport : Window, INotifyPropertyChanged
     {
         private Document _doc;
+        private ExternalEvent _importExternalEvent;
+        private ImportEventHandler _importEventHandler;
         private ObservableCollection<ParaExportCategoryItem> _categoryItems;
         private ObservableCollection<ParaExportParameterItem> _availableParameterItems;
         private ObservableCollection<ParaExportParameterItem> _selectedParameterItems;
@@ -97,10 +99,12 @@ namespace ExcelLink.Forms
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        public frmParaExport(Document doc)
+        public frmParaExport(Document doc, ExternalEvent importExternalEvent, ImportEventHandler importEventHandler)
         {
             InitializeComponent();
             _doc = doc;
+            _importExternalEvent = importExternalEvent;
+            _importEventHandler = importEventHandler;
             DataContext = this;
 
             // Initialize collections
@@ -548,139 +552,11 @@ namespace ExcelLink.Forms
 
             string excelFile = openDialog.FileName;
 
-            ShowProgressBar();
+            // Set data for the event handler
+            _importEventHandler.SetData(excelFile, _doc, this);
 
-            Excel.Application excel = null;
-            Excel.Workbook workbook = null;
-            Excel.Worksheet worksheet = null;
-            Excel.Range usedRange = null;
-
-            try
-            {
-                excel = new Excel.Application();
-                workbook = excel.Workbooks.Open(excelFile);
-
-                worksheet = workbook.Worksheets.Cast<Excel.Worksheet>()
-                                    .FirstOrDefault(s => s.Name != "Color Legend");
-
-                if (worksheet == null)
-                {
-                    TaskDialog.Show("Error", "Could not find a valid worksheet to import from.");
-                    return;
-                }
-
-                usedRange = worksheet.UsedRange;
-
-                if (usedRange == null || usedRange.Rows.Count < 2)
-                {
-                    TaskDialog.Show("Error", "The selected worksheet is empty or does not contain any data rows.");
-                    return;
-                }
-
-                List<string> headers = new List<string>();
-                int firstDataColumn = 2;
-
-                for (int j = firstDataColumn; j <= usedRange.Columns.Count; j++)
-                {
-                    var headerCell = usedRange.Cells[1, j] as Excel.Range;
-                    if (headerCell != null && headerCell.Value2 != null)
-                    {
-                        headers.Add(headerCell.Value2.ToString());
-                    }
-                }
-
-                List<string> errorMessages = new List<string>();
-
-                using (Transaction t = new Transaction(_doc, "Import Parameters from Excel"))
-                {
-                    t.Start();
-                    for (int i = 2; i <= usedRange.Rows.Count; i++)
-                    {
-                        var idCell = usedRange.Cells[i, 1] as Excel.Range;
-
-                        if (idCell == null || idCell.Value2 == null) continue;
-
-                        string idString = idCell.Value2.ToString();
-                        int elementIdInt;
-
-                        if (!int.TryParse(idString, out elementIdInt))
-                        {
-                            errorMessages.Add($"Row {i}: Failed to parse ElementId '{idString}'. Skipping row.");
-                            continue;
-                        }
-
-                        ElementId elementId = new ElementId(elementIdInt);
-                        Element element = _doc.GetElement(elementId);
-
-                        if (element != null)
-                        {
-                            for (int j = 0; j < headers.Count; j++)
-                            {
-                                string paramName = headers[j];
-                                var paramCell = usedRange.Cells[i, j + firstDataColumn] as Excel.Range;
-                                string paramValue = paramCell?.Value2?.ToString();
-
-                                if (!string.IsNullOrEmpty(paramValue))
-                                {
-                                    try
-                                    {
-                                        if (paramName == "Category" || paramName == "ElementId")
-                                        {
-                                            continue;
-                                        }
-
-                                        Parameter curParam = element.LookupParameter(paramName);
-                                        if (curParam != null && curParam.IsReadOnly)
-                                        {
-                                            continue;
-                                        }
-
-                                        Utils.SetParameterValue(element, paramName, paramValue);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        errorMessages.Add($"Row {i}: Failed to set parameter '{paramName}' with value '{paramValue}'. Error: {ex.Message}");
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            errorMessages.Add($"Row {i}: Element with ID '{elementIdInt}' not found in model. Skipping row.");
-                        }
-                        UpdateProgressBar((int)((double)(i - 1) / (usedRange.Rows.Count - 1) * 100));
-                    }
-                    t.Commit();
-                }
-
-                if (errorMessages.Any())
-                {
-                    string summary = "Import completed with errors:\n" + string.Join("\n", errorMessages.Take(10));
-                    if (errorMessages.Count > 10)
-                    {
-                        summary += $"\n...and {errorMessages.Count - 10} more errors.";
-                    }
-                    TaskDialog.Show("Import Completed with Errors", summary);
-                }
-                else
-                {
-                    TaskDialog.Show("Success", "Import completed successfully!");
-                }
-            }
-            catch (Exception ex)
-            {
-                TaskDialog.Show("Error", $"Failed to import parameters:\n{ex.Message}");
-            }
-            finally
-            {
-                HideProgressBar();
-                if (workbook != null) workbook.Close(false);
-                if (excel != null) excel.Quit();
-                if (usedRange != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(usedRange);
-                if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
-                if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
-            }
+            // Raise the external event
+            _importExternalEvent.Raise();
         }
 
         public void UpdateProgressBar(int percentage)
@@ -693,12 +569,15 @@ namespace ExcelLink.Forms
         {
             progressBar.Visibility = System.Windows.Visibility.Visible;
             progressBarText.Visibility = System.Windows.Visibility.Visible;
+            progressBarLabel.Visibility = System.Windows.Visibility.Visible;
+            progressBarLabel.Text = "Processing...";
         }
 
         public void HideProgressBar()
         {
             progressBar.Visibility = System.Windows.Visibility.Collapsed;
             progressBarText.Visibility = System.Windows.Visibility.Collapsed;
+            progressBarLabel.Visibility = System.Windows.Visibility.Collapsed;
         }
 
         private void rbEntireModel_Checked(object sender, RoutedEventArgs e)
@@ -864,8 +743,123 @@ namespace ExcelLink.Forms
             }
         }
 
-        private void ParameterCheckBox_Changed(object sender, RoutedEventArgs e)
+        private void CategoryCheckBox_Changed(object sender, RoutedEventArgs e)
         {
+            var checkBox = sender as System.Windows.Controls.CheckBox;
+            if (checkBox == null) return;
+
+            var categoryItem = checkBox.DataContext as ParaExportCategoryItem;
+            if (categoryItem == null) return;
+
+            if (categoryItem.IsSelectAll)
+            {
+                // Handle "Select All" checkbox
+                bool isChecked = checkBox.IsChecked ?? false;
+                foreach (var item in CategoryItems)
+                {
+                    if (!item.IsSelectAll)
+                    {
+                        item.IsSelected = isChecked;
+                    }
+                }
+            }
+            else
+            {
+                // Update parameters when a category is selected/deselected
+                UpdateAvailableParameters();
+            }
+        }
+
+        private void UpdateAvailableParameters()
+        {
+            AvailableParameterItems.Clear();
+
+            var selectedCategories = CategoryItems
+                .Where(item => item.IsSelected && !item.IsSelectAll)
+                .ToList();
+
+            if (!selectedCategories.Any()) return;
+
+            // Get all unique parameters from selected categories
+            HashSet<string> parameterNames = new HashSet<string>();
+            Dictionary<string, Parameter> parameterMap = new Dictionary<string, Parameter>();
+            Dictionary<string, bool> isReadOnlyMap = new Dictionary<string, bool>();
+            Dictionary<string, bool> isTypeParamMap = new Dictionary<string, bool>();
+
+            foreach (var categoryItem in selectedCategories)
+            {
+                FilteredElementCollector collector;
+                if (IsEntireModelChecked)
+                {
+                    collector = new FilteredElementCollector(_doc);
+                }
+                else
+                {
+                    collector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                }
+
+                collector.OfCategoryId(categoryItem.Category.Id);
+                collector.WhereElementIsNotElementType();
+
+                var elements = collector.ToElements();
+                if (!elements.Any()) continue;
+
+                foreach (Element element in elements.Take(10)) // Sample first 10 elements
+                {
+                    // Get instance parameters
+                    foreach (Parameter param in element.Parameters)
+                    {
+                        if (param.Definition != null)
+                        {
+                            string paramName = param.Definition.Name;
+                            if (!parameterNames.Contains(paramName))
+                            {
+                                parameterNames.Add(paramName);
+                                parameterMap[paramName] = param;
+                                isReadOnlyMap[paramName] = param.IsReadOnly;
+                                isTypeParamMap[paramName] = false;
+                            }
+                        }
+                    }
+
+                    // Get type parameters
+                    Element elementType = _doc.GetElement(element.GetTypeId());
+                    if (elementType != null)
+                    {
+                        foreach (Parameter param in elementType.Parameters)
+                        {
+                            if (param.Definition != null)
+                            {
+                                string paramName = param.Definition.Name;
+                                if (!parameterNames.Contains(paramName))
+                                {
+                                    parameterNames.Add(paramName);
+                                    parameterMap[paramName] = param;
+                                    isReadOnlyMap[paramName] = param.IsReadOnly;
+                                    isTypeParamMap[paramName] = true;
+                                }
+                            }
+                        }
+                    }
+
+                    // Add specific built-in parameters
+                    AddSpecificBuiltInParameters(element, parameterNames, parameterMap);
+                }
+            }
+
+            // Create parameter items
+            foreach (string paramName in parameterNames.OrderBy(p => p))
+            {
+                if (parameterMap.ContainsKey(paramName))
+                {
+                    bool isReadOnly = isReadOnlyMap.ContainsKey(paramName) && isReadOnlyMap[paramName];
+                    bool isTypeParam = isTypeParamMap.ContainsKey(paramName) && isTypeParamMap[paramName];
+                    AvailableParameterItems.Add(new ParaExportParameterItem(parameterMap[paramName], isReadOnly, isTypeParam));
+                }
+            }
+
+            // Reset the search text
+            txtParameterSearch.Text = "Search parameters...";
         }
 
         private void txtCategorySearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -907,7 +901,7 @@ namespace ExcelLink.Forms
             {
                 string searchText = textBox.Text.ToLower();
 
-                if (searchText == "Search parameters...")
+                if (searchText == "search parameters...")
                 {
                     lvAvailableParameters.ItemsSource = AvailableParameterItems;
                     return;
@@ -999,7 +993,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveUp_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             foreach (var item in selectedItems)
@@ -1014,7 +1008,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveDown_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             for (int i = selectedItems.Count - 1; i >= 0; i--)
