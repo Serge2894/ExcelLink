@@ -135,7 +135,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Parameter Export/Import" FontWeight="Bold" FontSize="14"
+                <TextBlock Text="Excel Link" FontWeight="Bold" FontSize="14"
                            VerticalAlignment="Center" HorizontalAlignment="Left" />
                 <Button Grid.Column="1" Content="X" Width="25" Height="25" Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
@@ -261,7 +261,7 @@
                     <TextBlock Text="Color Legend:" FontWeight="Bold"/>
                     <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                         <Border Width="20" Height="20" Background="#80FF4747" BorderBrush="Black" BorderThickness="1"/>
-                        <TextBlock Text="Read-only" Margin="5,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Read-only Paramater" Margin="5,0,10,0" VerticalAlignment="Center"/>
                         <Border Width="20" Height="20" Background="#80FFE699" BorderBrush="Black" BorderThickness="1"/>
                         <TextBlock Text="Type Parameter" Margin="5,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
