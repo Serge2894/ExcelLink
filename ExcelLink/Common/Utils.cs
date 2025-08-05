@@ -61,6 +61,60 @@ namespace ExcelLink.Common
         // This method gets the parameter value as a formatted string.
         internal static string GetParameterValue(Element curElem, string paramName)
         {
+            // Special handling for built-in parameters that need custom string formatting
+            if (paramName == "Family")
+            {
+                if (curElem is FamilyInstance fi)
+                {
+                    return fi.Symbol?.FamilyName ?? string.Empty;
+                }
+                else if (curElem is Wall w)
+                {
+                    return w.WallType?.FamilyName ?? w.Category.Name;
+                }
+                else if (curElem is Floor f)
+                {
+                    return f.FloorType?.FamilyName ?? f.Category.Name;
+                }
+                else if (curElem.Category != null)
+                {
+                    return curElem.Category.Name;
+                }
+                return string.Empty;
+            }
+            if (paramName == "Family and Type")
+            {
+                if (curElem is FamilyInstance fi)
+                {
+                    return fi.Symbol?.FamilyName + ": " + fi.Name;
+                }
+                else if (curElem is Wall w)
+                {
+                    return w.WallType?.FamilyName + ": " + w.WallType?.Name;
+                }
+                else if (curElem is Floor f)
+                {
+                    return f.FloorType?.FamilyName + ": " + f.FloorType?.Name;
+                }
+                return curElem.Name;
+            }
+            if (paramName == "Type")
+            {
+                if (curElem is FamilyInstance fi)
+                {
+                    return fi.Name;
+                }
+                else if (curElem is Wall w)
+                {
+                    return w.WallType?.Name;
+                }
+                else if (curElem is Floor f)
+                {
+                    return f.FloorType?.Name;
+                }
+                return curElem.Name.Split(new[] { ':' }, 2).LastOrDefault()?.Trim() ?? curElem.Name;
+            }
+
             Parameter curParam = GetParameterByName(curElem, paramName);
             if (curParam != null)
             {

@@ -134,10 +134,18 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Excel Link" FontWeight="Bold" FontSize="14"
+                <TextBlock Text="Parameter Export/Import" FontWeight="Bold" FontSize="14"
                            VerticalAlignment="Center" HorizontalAlignment="Left" />
-                <Button Grid.Column="1" Content="X" Width="25" Height="25" Padding="0"
+                <Button Grid.Column="1" Content="_" Width="25" Height="25" Padding="0"
+                        FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMinimize_Click"/>
+                <Button x:Name="btnMaximize" Grid.Column="2" Content="🗖" Width="25" Height="25" Padding="0"
+                        FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMaximize_Click"/>
+                <Button Grid.Column="3" Content="X" Width="25" Height="25" Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnClose_Click"/>
             </Grid>
@@ -261,7 +269,7 @@
                     <TextBlock Text="Color Legend:" FontWeight="Bold"/>
                     <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                         <Border Width="20" Height="20" Background="#80FF4747" BorderBrush="Black" BorderThickness="1"/>
-                        <TextBlock Text="Read-only Paramater" Margin="5,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Read-only Parameter" Margin="5,0,10,0" VerticalAlignment="Center"/>
                         <Border Width="20" Height="20" Background="#80FFE699" BorderBrush="Black" BorderThickness="1"/>
                         <TextBlock Text="Type Parameter" Margin="5,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
@@ -314,19 +322,19 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Border x:Name="progressBarContainer" Grid.Column="0" Height="25" Margin="0,0,10,0" 
+            <Border x:Name="progressBarContainer" Grid.Column="0" Height="25" Margin="0,0,10,0"
                     Background="#E0E0E0" CornerRadius="12.5">
                 <Grid>
-                    <Border x:Name="progressBarFill" 
-                            Background="#4CAF50" 
+                    <Border x:Name="progressBarFill"
+                            Background="#4CAF50"
                             CornerRadius="12.5"
                             HorizontalAlignment="Left"
                             Width="0"/>
-                    <TextBlock x:Name="progressBarText" 
-                               Text="Ready" 
-                               HorizontalAlignment="Center" 
+                    <TextBlock x:Name="progressBarText"
+                               Text="Ready"
+                               HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               FontWeight="Bold" 
+                               FontWeight="Bold"
                                Foreground="#333333"/>
                 </Grid>
             </Border>

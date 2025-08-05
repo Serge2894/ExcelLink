@@ -31,6 +31,8 @@ namespace ExcelLink.Forms
         private ObservableCollection<ParaExportCategoryItem> _categoryItems;
         private ObservableCollection<ParaExportParameterItem> _availableParameterItems;
         private ObservableCollection<ParaExportParameterItem> _selectedParameterItems;
+        private bool _isMaximized = false;
+
 
         public ObservableCollection<ParaExportCategoryItem> CategoryItems
         {
@@ -121,9 +123,30 @@ namespace ExcelLink.Forms
 
         private void Border_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (e.LeftButton == MouseButtonState.Pressed && !_isMaximized)
             {
                 DragMove();
+            }
+        }
+
+        private void btnMinimize_Click(object sender, RoutedEventArgs e)
+        {
+            this.WindowState = WindowState.Minimized;
+        }
+
+        private void btnMaximize_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isMaximized)
+            {
+                this.WindowState = WindowState.Normal;
+                btnMaximize.Content = "🗖";
+                _isMaximized = false;
+            }
+            else
+            {
+                this.WindowState = WindowState.Maximized;
+                btnMaximize.Content = "🗗";
+                _isMaximized = true;
             }
         }
 
@@ -941,6 +964,10 @@ namespace ExcelLink.Forms
                 }
             }
 
+            // Exclude "Type Name" and "Family Name" parameters
+            parameterNames.Remove("Type Name");
+            parameterNames.Remove("Family Name");
+
             // Create parameter items
             foreach (string paramName in parameterNames.OrderBy(p => p))
             {
@@ -949,8 +976,8 @@ namespace ExcelLink.Forms
                     bool isReadOnly = isReadOnlyMap.ContainsKey(paramName) && isReadOnlyMap[paramName];
                     bool isTypeParam = isTypeParamMap.ContainsKey(paramName) && isTypeParamMap[paramName];
 
-                    // Make the "Type" and "Family and Type" parameter read-only
-                    if (paramName == "Type" || paramName == "Family and Type")
+                    // Make the "Type", "Family and Type", and "Family" parameter read-only
+                    if (paramName == "Type" || paramName == "Family and Type" || paramName == "Family")
                     {
                         isReadOnly = true;
                     }
@@ -1145,7 +1172,7 @@ namespace ExcelLink.Forms
 
         private void btnMoveDown_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
+            var selectedItems = lvSelectedParameters.Items.Cast<ParaExportParameterItem>().ToList();
             if (selectedItems.Count == 0) return;
 
             for (int i = selectedItems.Count - 1; i >= 0; i--)
