@@ -86,8 +86,9 @@ namespace ExcelLink.Forms
                     }
                     if (excelApp != null)
                     {
-                        try { excelApp.Quit(); } catch { }
-                        System.Runtime.InteropServices.Marshal.ReleaseComObject(excelApp);
+                        // Comment out or remove these two lines to keep Excel open
+                        // try { excelApp.Quit(); } catch { }
+                        // System.Runtime.InteropServices.Marshal.ReleaseComObject(excelApp);
                     }
                 }
             }

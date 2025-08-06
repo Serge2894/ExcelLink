@@ -1,23 +1,24 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using ExcelLink.Common;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Drawing;
+using System.Globalization;
 using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Forms = System.Windows.Forms;
-using Excel = Microsoft.Office.Interop.Excel;
-using System.Drawing;
-using System.Text;
-using System.Threading.Tasks;
-using ExcelLink.Common;
-using System.Reflection;
-using System.Globalization;
 using System.Windows.Threading;
+using System.Xml.Linq;
+using Excel = Microsoft.Office.Interop.Excel;
+using Forms = System.Windows.Forms;
 
 namespace ExcelLink.Forms
 {
@@ -471,7 +472,7 @@ namespace ExcelLink.Forms
                         {
                             UpdateProgressBar(100);
                             System.Threading.Thread.Sleep(500); // Brief pause at 100%
-                            HideProgressBar();
+                            // The progress bar will remain at 100%
                             frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully");
                             infoDialog.ShowDialog();
                         });
@@ -528,8 +529,7 @@ namespace ExcelLink.Forms
                         {
                             UpdateProgressBar(100);
                             System.Threading.Thread.Sleep(500); // Brief pause at 100%
-                            HideProgressBar();
-
+                            // The progress bar will remain at 100%
                             if (errors.Any())
                             {
                                 var failForm = new frmImportFailed(errors);
@@ -682,7 +682,7 @@ namespace ExcelLink.Forms
                     // Show info dialog
                     Dispatcher.Invoke(() =>
                     {
-                        HideProgressBar();
+                        // The progress bar will remain at 100%
                         frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
                         infoDialog.ShowDialog();
                     });
@@ -731,7 +731,7 @@ namespace ExcelLink.Forms
                     if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
                     if (colorLegendSheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(colorLegendSheet);
                     if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                    if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
+                    // The excel application is intentionally not released here, so it remains open
                 }
             });
         }
