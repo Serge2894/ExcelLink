@@ -79,17 +79,8 @@ namespace ExcelLink.Forms
                 }
                 finally
                 {
-                    if (workbook != null)
-                    {
-                        try { workbook.Close(false); } catch { }
-                        System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                    }
-                    if (excelApp != null)
-                    {
-                        // Comment out or remove these two lines to keep Excel open
-                        // try { excelApp.Quit(); } catch { }
-                        // System.Runtime.InteropServices.Marshal.ReleaseComObject(excelApp);
-                    }
+                    // The workbook and Excel application objects are intentionally left open
+                    // and will not be released here. This allows the user to see the report.
                 }
             }
         }
