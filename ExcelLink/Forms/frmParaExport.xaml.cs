@@ -41,6 +41,10 @@ namespace ExcelLink.Forms
         private int _currentProgress;
         private System.Windows.Controls.TabControl _mainTabControl;
 
+        // New variables to hold Excel references
+        private Excel.Application _exportedExcelApp;
+        private Excel.Workbook _exportedExcelWorkbook;
+
         #region Properties
 
         public ObservableCollection<ParaExportCategoryItem> CategoryItems
@@ -180,6 +184,35 @@ namespace ExcelLink.Forms
             else
             {
                 _progressTimer.Stop();
+                if (_targetProgress == 100)
+                {
+                    // Show the success dialog after the animation is complete
+                    if (_mainTabControl.SelectedIndex == 1) // Schedules Tab
+                    {
+                        frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully");
+                        infoDialog.ShowDialog();
+
+                        if (_exportedExcelApp != null)
+                        {
+                            _exportedExcelApp.Visible = true;
+                        }
+                    }
+                    else // Categories Tab
+                    {
+                        frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
+                        infoDialog.ShowDialog();
+
+                        // Open Excel after the dialog is closed
+                        if (_exportedExcelApp != null)
+                        {
+                            _exportedExcelApp.Visible = true;
+                        }
+                    }
+                    // Hide the progress bar and clear Excel references
+                    HideProgressBar();
+                    _exportedExcelApp = null;
+                    _exportedExcelWorkbook = null;
+                }
             }
         }
 
@@ -451,47 +484,63 @@ namespace ExcelLink.Forms
             // Show progress bar
             Dispatcher.Invoke(() => ShowProgressBar());
 
-            try
+            Task.Run(() =>
             {
-                bool includeHeaders = chkIncludeHeaders.IsChecked ?? true;
-                bool includeGrandTotals = chkIncludeGrandTotals.IsChecked ?? true;
+                Excel.Application excel = null;
+                Excel.Workbook workbook = null;
+                bool exportSuccess = false;
 
-                Task.Run(() =>
+                try
                 {
-                    try
-                    {
-                        _scheduleManager.ExportSchedulesToExcel(
-                            SelectedSchedules,
-                            excelFile,
-                            (progress) => Dispatcher.Invoke(() => UpdateProgressBar(progress)),
-                            includeHeaders,
-                            includeGrandTotals
-                        );
+                    excel = new Excel.Application();
+                    workbook = excel.Workbooks.Add();
 
-                        Dispatcher.Invoke(() =>
-                        {
-                            UpdateProgressBar(100);
-                            System.Threading.Thread.Sleep(500); // Brief pause at 100%
-                            // The progress bar will remain at 100%
-                            frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully");
-                            infoDialog.ShowDialog();
-                        });
-                    }
-                    catch (Exception ex)
+                    // Remove default sheets except the first one
+                    while (workbook.Worksheets.Count > 1)
                     {
-                        Dispatcher.Invoke(() =>
-                        {
-                            HideProgressBar();
-                            TaskDialog.Show("Error", $"Failed to export schedules:\n{ex.Message}");
-                        });
+                        ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
                     }
-                });
-            }
-            catch (Exception ex)
-            {
-                HideProgressBar();
-                TaskDialog.Show("Error", $"Failed to export schedules:\n{ex.Message}");
-            }
+
+                    // Store references
+                    _exportedExcelApp = excel;
+                    _exportedExcelWorkbook = workbook;
+
+                    bool includeHeaders = chkIncludeHeaders.IsChecked ?? true;
+                    bool includeGrandTotals = chkIncludeGrandTotals.IsChecked ?? true;
+
+                    _scheduleManager.ExportSchedulesToExcel(
+                        SelectedSchedules,
+                        excelFile,
+                        (progress) => Dispatcher.Invoke(() => UpdateProgressBar(progress)),
+                        includeHeaders,
+                        includeGrandTotals
+                    );
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateProgressBar(100);
+                    });
+
+                    exportSuccess = true;
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        HideProgressBar();
+                        TaskDialog.Show("Error", $"Failed to export schedules:\n{ex.Message}");
+                    });
+                }
+                finally
+                {
+                    if (!exportSuccess)
+                    {
+                        // Clean up COM objects on failure
+                        if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+                        if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
+                    }
+                }
+            });
         }
 
         private void ImportSchedulesFromExcel()
@@ -612,6 +661,7 @@ namespace ExcelLink.Forms
                 Excel.Workbook workbook = null;
                 Excel.Worksheet worksheet = null;
                 Excel.Worksheet colorLegendSheet = null;
+                bool exportSuccess = false;
 
                 try
                 {
@@ -624,6 +674,10 @@ namespace ExcelLink.Forms
                     {
                         ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
                     }
+
+                    // Store references
+                    _exportedExcelApp = excel;
+                    _exportedExcelWorkbook = workbook;
 
                     // Create the Color Legend Sheet first
                     colorLegendSheet = (Excel.Worksheet)workbook.Worksheets[1];
@@ -677,18 +731,7 @@ namespace ExcelLink.Forms
 
                     // Show 100% progress
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
-                    System.Threading.Thread.Sleep(500); // Brief pause at 100%
-
-                    // Show info dialog
-                    Dispatcher.Invoke(() =>
-                    {
-                        // The progress bar will remain at 100%
-                        frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
-                        infoDialog.ShowDialog();
-                    });
-
-                    // Open Excel
-                    excel.Visible = true;
+                    exportSuccess = true;
                 }
                 catch (System.Runtime.InteropServices.COMException ex)
                 {
@@ -730,8 +773,12 @@ namespace ExcelLink.Forms
                 {
                     if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
                     if (colorLegendSheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(colorLegendSheet);
-                    if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                    // The excel application is intentionally not released here, so it remains open
+
+                    if (!exportSuccess)
+                    {
+                        if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+                        if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
+                    }
                 }
             });
         }

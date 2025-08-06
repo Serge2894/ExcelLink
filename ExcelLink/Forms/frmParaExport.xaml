@@ -11,6 +11,7 @@
 
     <Window.Resources>
         <Style x:Key="MainButtonStyle" TargetType="Button">
+
             <Setter Property="Background" Value="#E0E0E0"/>
             <Setter Property="Foreground" Value="Black"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
@@ -18,21 +19,26 @@
             <Setter Property="Height" Value="25"/>
             <Setter Property="Width" Value="70"/>
             <Setter Property="Template">
+
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
+                
+                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="12">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#4CAF50"/>
+
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
+
                 </Setter.Value>
             </Setter>
         </Style>
@@ -41,22 +47,27 @@
             <Setter Property="Background" Value="#E0E0E0"/>
             <Setter Property="Foreground" Value="Black"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontWeight" 
+ Value="Bold"/>
             <Setter Property="Height" Value="25"/>
             <Setter Property="Width" Value="70"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
+
                         <Border x:Name="border" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
+                             
+    CornerRadius="12">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
+
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#FF4747"/>
                                 <Setter Property="Foreground" Value="White"/>
+
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -65,6 +76,7 @@
         </Style>
 
         <Style x:Key="ActionButtonStyle" TargetType="Button">
+
             <Setter Property="Background" Value="#E0E0E0"/>
             <Setter Property="Foreground" Value="Black"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
@@ -72,14 +84,17 @@
             <Setter Property="Height" Value="25"/>
             <Setter Property="Width" Value="30"/>
             <Setter Property="Margin" Value="0,5"/>
+
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
+                            
+     BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="Center" 
+ VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
@@ -87,13 +102,15 @@
         </Style>
 
         <Style x:Key="ColoredListViewItemStyle" TargetType="ListViewItem">
+
             <Setter Property="Background" Value="{Binding ParameterColor}"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{x:Static SystemColors.HighlightBrush}"/>
+                    <Setter Property="Background" Value="{x:Static 
+ SystemColors.HighlightBrush}"/>
                     <Setter Property="Foreground" Value="{x:Static SystemColors.HighlightTextBrush}"/>
                 </Trigger>
             </Style.Triggers>
@@ -101,7 +118,8 @@
 
         <DataTemplate x:Key="ParameterItemTemplate">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding ParameterName}" Margin="2"
+                <TextBlock Text="{Binding ParameterName}" 
+ Margin="2"
                            FontWeight="{Binding FontWeight}"
                            Foreground="{Binding TextColor}"/>
             </StackPanel>
@@ -109,25 +127,30 @@
 
         <DataTemplate x:Key="CategoryItemTemplate">
             <StackPanel Orientation="Horizontal">
+
                 <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
                           Content="{Binding CategoryName}"
                           Margin="2"
                           FontWeight="{Binding FontWeight}"
-                          Foreground="{Binding TextColor}"
+   
+                        Foreground="{Binding TextColor}"
                           Checked="CategoryCheckBox_Changed"
                           Unchecked="CategoryCheckBox_Changed"/>
             </StackPanel>
         </DataTemplate>
+
 
         <DataTemplate x:Key="ScheduleItemTemplate">
             <StackPanel Orientation="Horizontal">
                 <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
                           Content="{Binding ScheduleName}"
                           Margin="2"
-                          FontWeight="{Binding FontWeight}"
+          
+                 FontWeight="{Binding FontWeight}"
                           Foreground="{Binding TextColor}"
                           Checked="ScheduleCheckBox_Changed"
                           Unchecked="ScheduleCheckBox_Changed"/>
+
             </StackPanel>
         </DataTemplate>
 
@@ -140,338 +163,428 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Title Bar -->
-        <Border Grid.Row="0" Background="#DDD" Padding="5" MouseDown="Border_MouseDown">
+        <Border Grid.Row="0" 
+ Background="#DDD" Padding="5" MouseDown="Border_MouseDown">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Parameter Export/Import" FontWeight="Bold" FontSize="14"
                            VerticalAlignment="Center" HorizontalAlignment="Left" />
-                <Button Grid.Column="1" Content="_" Width="25" Height="25" Padding="0"
+                <Button Grid.Column="1" Content="_" Width="25" Height="25" 
+ Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMinimize_Click"/>
                 <Button x:Name="btnMaximize" Grid.Column="2" Content="🗖" Width="25" Height="25" Padding="0"
-                        FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
+                        FontWeight="Bold" 
+ FontSize="12" Background="Transparent" BorderThickness="0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMaximize_Click"/>
                 <Button Grid.Column="3" Content="X" Width="25" Height="25" Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
-                        HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnClose_Click"/>
+                        
+ HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnClose_Click"/>
             </Grid>
         </Border>
 
-        <!-- Main Content with TabControl -->
-        <TabControl Grid.Row="1" Margin="10">
+        <TabControl x:Name="mainTabControl" Grid.Row="1" Margin="10">
             <TabControl.Resources>
                 <Style TargetType="TabItem">
                     <Setter Property="Template">
+
                         <Setter.Value>
                             <ControlTemplate TargetType="TabItem">
                                 <Border Name="Border" Margin="0,0,-4,0" 
-                                        Background="#E0E0E0" BorderBrush="#CCCCCC" 
+                 
+                        Background="#E0E0E0" BorderBrush="#CCCCCC" 
                                         BorderThickness="1,1,1,0" CornerRadius="4,4,0,0">
+
                                     <ContentPresenter x:Name="ContentSite"
                                                       VerticalAlignment="Center"
-                                                      HorizontalAlignment="Center"
+                                           
+            HorizontalAlignment="Center"
                                                       ContentSource="Header"
-                                                      Margin="12,2,12,2"/>
+                                   
+                    Margin="12,2,12,2"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
+
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter Property="Panel.ZIndex" Value="100"/>
+
                                         <Setter TargetName="Border" Property="Background" Value="White"/>
                                         <Setter TargetName="Border" Property="BorderThickness" Value="1,1,1,0"/>
                                         <Setter Property="FontWeight" Value="Bold"/>
+
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
+
                         </Setter.Value>
                     </Setter>
                 </Style>
             </TabControl.Resources>
 
-            <!-- Categories Tab -->
             <TabItem Header="Categories">
+
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Radio buttons for scope -->
+
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,10,0,10">
                         <RadioButton x:Name="rbEntireModel" Content="Entire Model" IsChecked="True"
-                                     Margin="0,0,10,0" GroupName="ViewFilter" Checked="rbEntireModel_Checked"/>
+                               
+       Margin="0,0,10,0" GroupName="ViewFilter" Checked="rbEntireModel_Checked"/>
                         <RadioButton x:Name="rbActiveView" Content="Active View" GroupName="ViewFilter"
                                      Checked="rbActiveView_Checked"/>
                     </StackPanel>
 
-                    <!-- Categories content -->
+
                     <Grid Grid.Row="1" Margin="10,0,10,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="1*" MinWidth="150"/>
+
                             <ColumnDefinition Width="1*" MinWidth="150"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="1*" MinWidth="150"/>
+
                         </Grid.ColumnDefinitions>
 
-                        <!-- Categories List -->
                         <Grid Grid.Column="0" Margin="0,0,5,0">
                             <Grid.RowDefinitions>
+
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
+
                             </Grid.RowDefinitions>
                             <Label Content="Select Categories:" Grid.Row="0" FontWeight="Bold"/>
                             <TextBox x:Name="txtCategorySearch"
-                                     Grid.Row="1"
+                          
+            Grid.Row="1"
                                      Margin="0,5,0,5"
                                      Padding="5,3"
-                                     TextChanged="txtCategorySearch_TextChanged"
+               
+                       TextChanged="txtCategorySearch_TextChanged"
                                      GotFocus="txtCategorySearch_GotFocus"
                                      LostFocus="txtCategorySearch_LostFocus"
-                                     Text="Search categories...">
+    
+                                  Text="Search categories...">
                                 <TextBox.Resources>
+
                                     <Style TargetType="{x:Type TextBox}">
                                         <Setter Property="Template">
                                             <Setter.Value>
+
                                                 <ControlTemplate TargetType="{x:Type TextBox}">
                                                     <Border Background="{TemplateBinding Background}"
-                                                            BorderBrush="#CCCCCC"
-                                                            BorderThickness="1"
+       
+                                                      BorderBrush="#CCCCCC"
+                                               
+              BorderThickness="1"
                                                             CornerRadius="5">
+
                                                         <ScrollViewer x:Name="PART_ContentHost"
-                                                                      Margin="{TemplateBinding Padding}"/>
+                                                                      
+ Margin="{TemplateBinding Padding}"/>
                                                     </Border>
+
                                                 </ControlTemplate>
                                             </Setter.Value>
                                         </Setter>
+
                                     </Style>
                                 </TextBox.Resources>
                             </TextBox>
+
                             <Border Grid.Row="2"
                                     BorderThickness="1"
                                     BorderBrush="#CCCCCC"
-                                    Background="White"
+                  
+                   Background="White"
                                     CornerRadius="5">
                                 <ListView x:Name="lvCategories"
-                                          Background="Transparent"
+             
+                              Background="Transparent"
                                           BorderThickness="0"
-                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             
+              ScrollViewer.VerticalScrollBarVisibility="Auto"
                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                           SelectionMode="Extended"
-                                          ItemTemplate="{StaticResource CategoryItemTemplate}">
+   
+                                        ItemTemplate="{StaticResource CategoryItemTemplate}">
                                 </ListView>
+
                             </Border>
                         </Grid>
 
-                        <!-- Available Parameters -->
                         <Grid Grid.Column="1" Margin="5,0,5,0">
+
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Label Content="Available Parameters:" Grid.Row="0" FontWeight="Bold"/>
+
                             <TextBox x:Name="txtParameterSearch"
                                      Grid.Row="1"
-                                     Margin="0,5,0,5"
+                                     
+ Margin="0,5,0,5"
                                      Padding="5,3"
                                      TextChanged="txtParameterSearch_TextChanged"
-                                     GotFocus="txtParameterSearch_GotFocus"
+                          
+            GotFocus="txtParameterSearch_GotFocus"
                                      LostFocus="txtParameterSearch_LostFocus"
                                      Text="Search parameters...">
+
                                 <TextBox.Resources>
                                     <Style TargetType="{x:Type TextBox}">
                                         <Setter Property="Template">
+
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="{x:Type TextBox}">
+
                                                     <Border Background="{TemplateBinding Background}"
-                                                            BorderBrush="#CCCCCC"
+                                                       
+      BorderBrush="#CCCCCC"
                                                             BorderThickness="1"
-                                                            CornerRadius="5">
+                                   
+                          CornerRadius="5">
                                                         <ScrollViewer x:Name="PART_ContentHost"
-                                                                      Margin="{TemplateBinding Padding}"/>
+                  
+                                                     Margin="{TemplateBinding Padding}"/>
+
                                                     </Border>
                                                 </ControlTemplate>
                                             </Setter.Value>
+
                                         </Setter>
                                     </Style>
+
                                 </TextBox.Resources>
                             </TextBox>
                             <Border Grid.Row="2"
                                     BorderThickness="1"
-                                    BorderBrush="#CCCCCC"
+  
+                                   BorderBrush="#CCCCCC"
                                     Background="White"
-                                    CornerRadius="5">
+                              
+       CornerRadius="5">
                                 <ListView x:Name="lvAvailableParameters"
                                           Background="Transparent"
-                                          BorderThickness="0"
+                   
+                        BorderThickness="0"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                   
+        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                           SelectionMode="Multiple"
                                           ItemTemplate="{StaticResource ParameterItemTemplate}"
-                                          ItemContainerStyle="{StaticResource ColoredListViewItemStyle}"
+        
+                                   ItemContainerStyle="{StaticResource ColoredListViewItemStyle}"
                                           MouseDoubleClick="lvAvailableParameters_MouseDoubleClick">
+
                                 </ListView>
                             </Border>
                             <StackPanel Grid.Row="3" Margin="0,5,0,0">
-                                <TextBlock Text="Color Legend:" FontWeight="Bold"/>
+                                <TextBlock 
+ Text="Color Legend:" FontWeight="Bold"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                                     <Border Width="20" Height="20" Background="#80FF4747" BorderBrush="Black" BorderThickness="1"/>
+
                                     <TextBlock Text="Read-only Parameter" Margin="5,0,10,0" VerticalAlignment="Center"/>
                                     <Border Width="20" Height="20" Background="#80FFE699" BorderBrush="Black" BorderThickness="1"/>
                                     <TextBlock Text="Type Parameter" Margin="5,0,0,0" VerticalAlignment="Center"/>
+
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
 
-                        <!-- Arrow Buttons -->
+
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="5,0,5,0">
                             <Button x:Name="btnMoveRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;"
-                                    Click="btnMoveRight_Click"/>
+ Click="btnMoveRight_Click"/>
                             <Button x:Name="btnMoveAllRight" Style="{StaticResource ActionButtonStyle}" Content="&gt;&gt;"
-                                    Click="btnMoveAllRight_Click"/>
+ Click="btnMoveAllRight_Click"/>
                             <Button x:Name="btnMoveAllLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;&lt;"
-                                    Click="btnMoveAllLeft_Click"/>
+ Click="btnMoveAllLeft_Click"/>
                             <Button x:Name="btnMoveLeft" Style="{StaticResource ActionButtonStyle}" Content="&lt;"
-                                    Click="btnMoveLeft_Click"/>
+ Click="btnMoveLeft_Click"/>
                             <Button x:Name="btnMoveUp" Style="{StaticResource ActionButtonStyle}" Content="▲" Click="btnMoveUp_Click"/>
                             <Button x:Name="btnMoveDown" Style="{StaticResource ActionButtonStyle}" Content="▼" Click="btnMoveDown_Click"/>
                         </StackPanel>
 
-                        <!-- Selected Parameters -->
+
                         <Grid Grid.Column="3" Margin="5,0,0,0">
                             <Grid.RowDefinitions>
+
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <Label Content="Selected Parameters:" Grid.Row="0" FontWeight="Bold"/>
+
                             <Grid Grid.Row="1">
                                 <Border Grid.Column="0"
                                         BorderThickness="1"
+ 
                                         BorderBrush="#CCCCCC"
                                         Background="White"
-                                        CornerRadius="5">
+                     
+                    CornerRadius="5">
                                     <ListView x:Name="lvSelectedParameters"
-                                              Background="Transparent"
+                                            
+   Background="Transparent"
                                               BorderThickness="0"
                                               ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+      
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                               SelectionMode="Multiple"
-                                              ItemTemplate="{StaticResource ParameterItemTemplate}"
+              
+                                 ItemTemplate="{StaticResource ParameterItemTemplate}"
                                               ItemContainerStyle="{StaticResource ColoredListViewItemStyle}"
-                                              MouseDoubleClick="lvSelectedParameters_MouseDoubleClick">
+                    
+                           MouseDoubleClick="lvSelectedParameters_MouseDoubleClick">
                                     </ListView>
                                 </Border>
+
                             </Grid>
                         </Grid>
                     </Grid>
                 </Grid>
             </TabItem>
 
-            <!-- Schedules Tab -->
+
             <TabItem Header="Schedules">
                 <Grid Margin="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1*"/>
+
                         <ColumnDefinition Width="1*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Available Schedules -->
                     <Label Grid.Column="0" Grid.Row="0" Content="Available Schedules:" FontWeight="Bold"/>
+
                     <TextBox x:Name="txtScheduleSearch"
                              Grid.Column="0"
                              Grid.Row="1"
-                             Margin="0,5,5,5"
+                             
+ Margin="0,5,5,5"
                              Padding="5,3"
                              TextChanged="txtScheduleSearch_TextChanged"
                              GotFocus="txtScheduleSearch_GotFocus"
-                             LostFocus="txtScheduleSearch_LostFocus"
+             
+                 LostFocus="txtScheduleSearch_LostFocus"
                              Text="Search schedules...">
                         <TextBox.Resources>
-                            <Style TargetType="{x:Type TextBox}">
+                            <Style TargetType="{x:Type 
+ TextBox}">
                                 <Setter Property="Template">
                                     <Setter.Value>
+
                                         <ControlTemplate TargetType="{x:Type TextBox}">
                                             <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="#CCCCCC"
+                                           
+          BorderBrush="#CCCCCC"
                                                     BorderThickness="1"
-                                                    CornerRadius="5">
+                                       
+              CornerRadius="5">
                                                 <ScrollViewer x:Name="PART_ContentHost"
-                                                              Margin="{TemplateBinding Padding}"/>
+                                      
+                         Margin="{TemplateBinding Padding}"/>
                                             </Border>
+
                                         </ControlTemplate>
                                     </Setter.Value>
                                 </Setter>
+
                             </Style>
                         </TextBox.Resources>
                     </TextBox>
                     <Border Grid.Column="0"
                             Grid.Row="2"
-                            Margin="0,0,5,0"
+  
+                           Margin="0,0,5,0"
                             BorderThickness="1"
                             BorderBrush="#CCCCCC"
-                            Background="White"
+                  
+           Background="White"
                             CornerRadius="5">
                         <ListView x:Name="lvSchedules"
                                   Background="Transparent"
-                                  BorderThickness="0"
+   
+                                BorderThickness="0"
                                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+ 
                                   SelectionMode="Extended"
                                   ItemTemplate="{StaticResource ScheduleItemTemplate}">
                         </ListView>
+
                     </Border>
 
-                    <!-- Selected Schedules Info -->
                     <Label Grid.Column="1" Grid.Row="0" Content="Schedule Information:" FontWeight="Bold"/>
                     <Border Grid.Column="1"
-                            Grid.Row="2"
+                  
+           Grid.Row="2"
                             Margin="5,26,0,0"
                             BorderThickness="1"
                             BorderBrush="#CCCCCC"
-                            Background="#F9F9F9"
+      
+                       Background="#F9F9F9"
                             CornerRadius="5"
                             Padding="10">
+
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
                                 <TextBlock x:Name="txtScheduleInfo" 
-                                           TextWrapping="Wrap"
+                                   
+         TextWrapping="Wrap"
                                            FontSize="12"
-                                           Text="Select one or more schedules to export. Each schedule will be exported to a separate sheet in the Excel file."/>
+                                           Text="Select one or more schedules to 
+ export. Each schedule will be exported to a separate sheet in the Excel file."/>
                                 <Separator Margin="0,10"/>
                                 <TextBlock Text="Export Options:" FontWeight="Bold" Margin="0,5"/>
+
                                 <CheckBox x:Name="chkIncludeHeaders" 
                                           Content="Include column headers" 
-                                          IsChecked="True" 
+                                       
+    IsChecked="True" 
                                           Margin="0,5"/>
                                 <CheckBox x:Name="chkIncludeGrandTotals" 
-                                          Content="Include grand totals (if available)" 
+                    
+                       Content="Include grand totals (if available)" 
                                           IsChecked="True" 
-                                          Margin="0,5"/>
+                              
+             Margin="0,5"/>
                                 <Separator Margin="0,10"/>
                                 <TextBlock x:Name="txtSelectedSchedulesCount" 
-                                           Text="No schedules selected" 
+                     
+                       Text="No schedules selected" 
                                            FontStyle="Italic"/>
                             </StackPanel>
+
                         </ScrollViewer>
                     </Border>
                 </Grid>
             </TabItem>
         </TabControl>
 
-        <!-- Progress Bar and Buttons -->
         <Grid Grid.Row="2" Margin="15,10,15,15">
+
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -479,37 +592,45 @@
 
             <Border x:Name="progressBarContainer" Grid.Column="0" Height="25" Margin="0,0,10,0"
                     Background="#E0E0E0" CornerRadius="12.5">
+
                 <Grid>
                     <Border x:Name="progressBarFill"
                             Background="#4CAF50"
                             CornerRadius="12.5"
-                            HorizontalAlignment="Left"
+             
+                HorizontalAlignment="Left"
                             Width="0"/>
                     <TextBlock x:Name="progressBarText"
                                Text="Ready"
-                               HorizontalAlignment="Center"
+     
+                           HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                FontWeight="Bold"
-                               Foreground="#333333"/>
+            
+                    Foreground="#333333"/>
                 </Grid>
             </Border>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="btnExport"
-                        Style="{StaticResource MainButtonStyle}"
+                      
+   Style="{StaticResource MainButtonStyle}"
                         Content="Export"
                         Margin="0,0,10,0"
                         Click="btnExport_Click"/>
                 <Button x:Name="btnImport"
-                        Style="{StaticResource MainButtonStyle}"
+        
+                 Style="{StaticResource MainButtonStyle}"
                         Content="Import"
                         Margin="0,0,10,0"
                         Click="btnImport_Click"/>
+
                 <Button x:Name="btnCancel"
                         Style="{StaticResource CancelButtonStyle}"
                         Content="Cancel"
                         Click="btnCancel_Click"/>
             </StackPanel>
         </Grid>
+
     </Grid>
 </Window>

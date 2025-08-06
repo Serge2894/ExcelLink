@@ -80,7 +80,7 @@ namespace ExcelLink.Common
 
                     processedSchedules++;
                     int percentage = (int)((double)processedSchedules / totalSchedules * 100);
-                    progressCallback?.Invoke(percentage);
+                    progressCallback?.Invoke(Math.Min(percentage, 100));
                 }
 
                 // Save workbook
@@ -90,9 +90,6 @@ namespace ExcelLink.Common
 
                 // Activate Color Legend sheet
                 colorLegendSheet.Activate();
-
-                // Show Excel
-                excel.Visible = true;
             }
             finally
             {
@@ -280,7 +277,7 @@ namespace ExcelLink.Common
                         errors.Add(new ImportErrorItem
                         {
                             ElementId = keyValue,
-                            Description = "Element not found in schedule"
+                            Description = "Element not found in model"
                         });
                         continue;
                     }

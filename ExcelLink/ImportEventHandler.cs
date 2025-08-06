@@ -202,8 +202,7 @@ namespace ExcelLink.Common
                     t.Commit();
                 }
 
-                // Keep the progress bar at 100% and green after completion
-                _form.Dispatcher.Invoke(() => _form.UpdateProgressBar(100));
+                _form.Dispatcher.Invoke(() => _form.HideProgressBar());
 
                 if (errorMessages.Any())
                 {
