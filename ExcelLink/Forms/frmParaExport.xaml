@@ -591,23 +591,20 @@
             </Grid.ColumnDefinitions>
 
             <Border x:Name="progressBarContainer" Grid.Column="0" Height="25" Margin="0,0,10,0"
-                    Background="#E0E0E0" CornerRadius="12.5">
+        Background="#E0E0E0" CornerRadius="12.5">
 
                 <Grid>
                     <Border x:Name="progressBarFill"
-                            Background="#4CAF50"
-                            CornerRadius="12.5"
-             
+                Background="#4CAF50"
+                CornerRadius="12.5"
                 HorizontalAlignment="Left"
-                            Width="0"/>
+                Width="0"/>
                     <TextBlock x:Name="progressBarText"
-                               Text="Ready"
-     
-                           HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontWeight="Bold"
-            
-                    Foreground="#333333"/>
+                   Text="Ready"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   FontWeight="Bold"
+                   Foreground="#333333"/>
                 </Grid>
             </Border>
 

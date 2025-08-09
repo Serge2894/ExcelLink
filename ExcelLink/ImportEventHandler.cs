@@ -16,6 +16,9 @@ namespace ExcelLink.Common
         private Document _doc;
         private frmParaExport _form;
 
+        public List<ImportErrorItem> ErrorMessages { get; private set; }
+        public int UpdatedElementsCount { get; private set; }
+
         public string GetName() => "Import Data from Excel";
 
         public void SetData(string excelFile, Document doc, frmParaExport form)
@@ -23,6 +26,8 @@ namespace ExcelLink.Common
             _excelFile = excelFile;
             _doc = doc;
             _form = form;
+            ErrorMessages = new List<ImportErrorItem>();
+            UpdatedElementsCount = 0;
         }
 
         public void Execute(UIApplication app)
@@ -34,9 +39,6 @@ namespace ExcelLink.Common
 
             try
             {
-                // Show progress bar
-                _form.Dispatcher.Invoke(() => _form.ShowProgressBar());
-
                 excel = new Excel.Application();
                 workbook = excel.Workbooks.Open(_excelFile);
 
@@ -46,6 +48,7 @@ namespace ExcelLink.Common
                 if (worksheet == null)
                 {
                     TaskDialog.Show("Error", "Could not find a valid worksheet to import from.");
+                    _form.Dispatcher.Invoke(() => _form.HideProgressBar());
                     return;
                 }
 
@@ -54,6 +57,7 @@ namespace ExcelLink.Common
                 if (usedRange == null || usedRange.Rows.Count < 2)
                 {
                     TaskDialog.Show("Error", "The selected worksheet is empty or does not contain any data rows.");
+                    _form.Dispatcher.Invoke(() => _form.HideProgressBar());
                     return;
                 }
 
@@ -73,10 +77,8 @@ namespace ExcelLink.Common
                     }
                 }
 
-                List<ImportErrorItem> errorMessages = new List<ImportErrorItem>();
                 int totalRows = usedRange.Rows.Count - 1; // Exclude header row
                 int processedRows = 0;
-                int updatedElementsCount = 0;
 
                 using (Transaction t = new Transaction(_doc, "Import Parameters from Excel"))
                 {
@@ -89,11 +91,10 @@ namespace ExcelLink.Common
                         if (idCell == null || idCell.Value2 == null) continue;
 
                         string idString = idCell.Value2.ToString();
-                        int elementIdInt;
 
-                        if (!int.TryParse(idString, out elementIdInt))
+                        if (!int.TryParse(idString, out int elementIdInt))
                         {
-                            errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Invalid ElementId '{idString}'" });
+                            ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Invalid ElementId '{idString}'" });
                             continue;
                         }
 
@@ -174,68 +175,43 @@ namespace ExcelLink.Common
                                             }
                                             else
                                             {
-                                                errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}' with value '{paramValue}'" });
+                                                ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}' with value '{paramValue}'" });
                                             }
                                         }
                                     }
                                 }
                                 catch (Exception ex)
                                 {
-                                    errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}': {ex.Message}" });
+                                    ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}': {ex.Message}" });
                                 }
                             }
                             if (elementUpdated)
                             {
-                                updatedElementsCount++;
+                                UpdatedElementsCount++;
                             }
                         }
                         else
                         {
-                            errorMessages.Add(new ImportErrorItem { ElementId = idString, Description = "Element ID not found in model" });
+                            ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = "Element ID not found in model" });
                         }
 
                         processedRows++;
-                        _form.Dispatcher.Invoke(() =>
-                            _form.UpdateProgressBar((int)((double)processedRows / totalRows * 100)));
+                        int percentage = (int)((double)processedRows / totalRows * 100);
+                        _form.Dispatcher.Invoke(() => _form.UpdateProgressBar(percentage));
                     }
 
                     t.Commit();
                 }
 
-                _form.Dispatcher.Invoke(() => _form.HideProgressBar());
-
-                if (errorMessages.Any())
-                {
-                    // Show custom form with errors
-                    _form.Dispatcher.Invoke(() =>
-                    {
-                        var failForm = new frmImportFailed(errorMessages);
-                        failForm.ShowDialog();
-                    });
-                }
-                else if (updatedElementsCount > 0)
-                {
-                    // Show info dialog for success as requested
-                    _form.Dispatcher.Invoke(() =>
-                    {
-                        frmInfoDialog infoDialog = new frmInfoDialog("Model updated successfully");
-                        infoDialog.ShowDialog();
-                    });
-                }
-                else
-                {
-                    // Show info dialog if no parameters were updated
-                    _form.Dispatcher.Invoke(() =>
-                    {
-                        frmInfoDialog infoDialog = new frmInfoDialog("Import completed. \nNo parameters were updated.");
-                        infoDialog.ShowDialog();
-                    });
-                }
+                _form.Dispatcher.Invoke(() => _form.HandleImportCompletion());
             }
             catch (Exception ex)
             {
-                _form.Dispatcher.Invoke(() => _form.HideProgressBar());
-                TaskDialog.Show("Error", $"Failed to import parameters:\n{ex.Message}");
+                _form.Dispatcher.Invoke(() =>
+                {
+                    _form.HideProgressBar();
+                    TaskDialog.Show("Error", $"Failed to import parameters:\n{ex.Message}");
+                });
             }
             finally
             {

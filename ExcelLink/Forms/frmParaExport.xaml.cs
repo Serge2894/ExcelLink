@@ -40,6 +40,7 @@ namespace ExcelLink.Forms
         private int _targetProgress;
         private int _currentProgress;
         private System.Windows.Controls.TabControl _mainTabControl;
+        private Action _postProgressAction;
 
         // New variables to hold Excel references
         private Excel.Application _exportedExcelApp;
@@ -174,47 +175,22 @@ namespace ExcelLink.Forms
             if (_currentProgress < _targetProgress)
             {
                 _currentProgress = Math.Min(_currentProgress + 2, _targetProgress);
-                UpdateProgressBarImmediate(_currentProgress);
             }
             else if (_currentProgress > _targetProgress)
             {
                 _currentProgress = Math.Max(_currentProgress - 2, _targetProgress);
-                UpdateProgressBarImmediate(_currentProgress);
             }
-            else
+
+            UpdateProgressBarImmediate(_currentProgress);
+
+            if (_currentProgress >= 100)
             {
                 _progressTimer.Stop();
-                if (_targetProgress == 100)
-                {
-                    // Show the success dialog after the animation is complete
-                    if (_mainTabControl.SelectedIndex == 1) // Schedules Tab
-                    {
-                        frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully");
-                        infoDialog.ShowDialog();
-
-                        if (_exportedExcelApp != null)
-                        {
-                            _exportedExcelApp.Visible = true;
-                        }
-                    }
-                    else // Categories Tab
-                    {
-                        frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
-                        infoDialog.ShowDialog();
-
-                        // Open Excel after the dialog is closed
-                        if (_exportedExcelApp != null)
-                        {
-                            _exportedExcelApp.Visible = true;
-                        }
-                    }
-                    // Hide the progress bar and clear Excel references
-                    HideProgressBar();
-                    _exportedExcelApp = null;
-                    _exportedExcelWorkbook = null;
-                }
+                _postProgressAction?.Invoke();
+                _postProgressAction = null;
             }
         }
+
 
         private void UpdateProgressBarImmediate(int percentage)
         {
@@ -239,7 +215,7 @@ namespace ExcelLink.Forms
 
         public void UpdateProgressBar(int percentage)
         {
-            _targetProgress = percentage;
+            _targetProgress = Math.Min(100, percentage);
             if (!_progressTimer.IsEnabled)
             {
                 _progressTimer.Start();
@@ -482,7 +458,7 @@ namespace ExcelLink.Forms
             string excelFile = saveDialog.FileName;
 
             // Show progress bar
-            Dispatcher.Invoke(() => ShowProgressBar());
+            ShowProgressBar();
 
             Task.Run(() =>
             {
@@ -516,11 +492,18 @@ namespace ExcelLink.Forms
                         includeGrandTotals
                     );
 
-                    Dispatcher.Invoke(() =>
+                    _postProgressAction = () =>
                     {
-                        UpdateProgressBar(100);
-                    });
+                        frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully");
+                        infoDialog.ShowDialog();
+                        if (_exportedExcelApp != null)
+                        {
+                            _exportedExcelApp.Visible = true;
+                        }
+                        HideProgressBar();
+                    };
 
+                    Dispatcher.Invoke(() => UpdateProgressBar(100));
                     exportSuccess = true;
                 }
                 catch (Exception ex)
@@ -543,6 +526,33 @@ namespace ExcelLink.Forms
             });
         }
 
+        public void HandleImportCompletion()
+        {
+            _postProgressAction = () =>
+            {
+                var errorMessages = _importEventHandler.ErrorMessages;
+                var updatedElementsCount = _importEventHandler.UpdatedElementsCount;
+
+                if (errorMessages.Any())
+                {
+                    var failForm = new frmImportFailed(errorMessages);
+                    failForm.ShowDialog();
+                }
+                else if (updatedElementsCount > 0)
+                {
+                    frmInfoDialog infoDialog = new frmInfoDialog("Model updated successfully");
+                    infoDialog.ShowDialog();
+                }
+                else
+                {
+                    frmInfoDialog infoDialog = new frmInfoDialog("Import completed. \nNo parameters were updated.");
+                    infoDialog.ShowDialog();
+                }
+                HideProgressBar();
+            };
+            UpdateProgressBar(100);
+        }
+
         private void ImportSchedulesFromExcel()
         {
             OpenFileDialog openDialog = new OpenFileDialog();
@@ -556,41 +566,39 @@ namespace ExcelLink.Forms
 
             string excelFile = openDialog.FileName;
 
-            // Show progress bar
-            Dispatcher.Invoke(() => ShowProgressBar());
+            ShowProgressBar();
 
             Task.Run(() =>
             {
                 try
                 {
+                    List<ImportErrorItem> errors;
                     using (Transaction t = new Transaction(_doc, "Import Schedules from Excel"))
                     {
                         t.Start();
-
-                        var errors = _scheduleManager.ImportSchedulesFromExcel(
+                        errors = _scheduleManager.ImportSchedulesFromExcel(
                             excelFile,
                             (progress) => Dispatcher.Invoke(() => UpdateProgressBar(progress))
                         );
-
                         t.Commit();
-
-                        Dispatcher.Invoke(() =>
-                        {
-                            UpdateProgressBar(100);
-                            System.Threading.Thread.Sleep(500); // Brief pause at 100%
-                            // The progress bar will remain at 100%
-                            if (errors.Any())
-                            {
-                                var failForm = new frmImportFailed(errors);
-                                failForm.ShowDialog();
-                            }
-                            else
-                            {
-                                frmInfoDialog infoDialog = new frmInfoDialog("Schedules imported successfully");
-                                infoDialog.ShowDialog();
-                            }
-                        });
                     }
+
+                    _postProgressAction = () =>
+                    {
+                        if (errors.Any())
+                        {
+                            var failForm = new frmImportFailed(errors);
+                            failForm.ShowDialog();
+                        }
+                        else
+                        {
+                            frmInfoDialog infoDialog = new frmInfoDialog("Schedules imported successfully");
+                            infoDialog.ShowDialog();
+                        }
+                        HideProgressBar();
+                    };
+
+                    Dispatcher.Invoke(() => UpdateProgressBar(100));
                 }
                 catch (Exception ex)
                 {
@@ -728,6 +736,17 @@ namespace ExcelLink.Forms
                     excel.DisplayAlerts = true;
 
                     colorLegendSheet.Activate();
+
+                    _postProgressAction = () => {
+                        frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
+                        infoDialog.ShowDialog();
+
+                        if (_exportedExcelApp != null)
+                        {
+                            _exportedExcelApp.Visible = true;
+                        }
+                        HideProgressBar();
+                    };
 
                     // Show 100% progress
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
@@ -1031,10 +1050,8 @@ namespace ExcelLink.Forms
 
             string excelFile = openDialog.FileName;
 
-            // Set data for the event handler
+            ShowProgressBar();
             _importEventHandler.SetData(excelFile, _doc, this);
-
-            // Raise the external event
             _importExternalEvent.Raise();
         }
 
@@ -1167,11 +1184,9 @@ namespace ExcelLink.Forms
                     }
                 }
             }
-            else
-            {
-                // Update parameters when a category is selected/deselected
-                UpdateAvailableParameters();
-            }
+
+            UpdateAvailableParameters();
+
         }
 
         private void UpdateAvailableParameters()
