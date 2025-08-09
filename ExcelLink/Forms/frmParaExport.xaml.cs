@@ -456,13 +456,11 @@ namespace ExcelLink.Forms
             ShowProgressBar();
 
             var schedulesToExport = SelectedSchedules.ToList();
-            bool includeHeaders = chkIncludeHeaders.IsChecked ?? true;
-            bool includeGrandTotals = chkIncludeGrandTotals.IsChecked ?? true;
 
             List<SimpleScheduleData> scheduleData;
             try
             {
-                scheduleData = _scheduleManager.GetScheduleDataForExport(schedulesToExport, includeHeaders, includeGrandTotals);
+                scheduleData = _scheduleManager.GetScheduleDataForExport(schedulesToExport, false);
             }
             catch (Exception ex)
             {

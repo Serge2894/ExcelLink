@@ -72,7 +72,7 @@ namespace ExcelLink.Common
             return schedules;
         }
 
-        public List<SimpleScheduleData> GetScheduleDataForExport(List<ViewSchedule> schedules, bool includeHeaders, bool includeGrandTotals)
+        public List<SimpleScheduleData> GetScheduleDataForExport(List<ViewSchedule> schedules, bool includeHeaders)
         {
             var allScheduleData = new List<SimpleScheduleData>();
 
@@ -221,7 +221,7 @@ namespace ExcelLink.Common
                     simpleData.IsGroupHeaderOrFooterRow.Add(isHeaderOrFooter);
                 }
 
-                if (includeGrandTotals)
+                if (definition.ShowGrandTotal)
                 {
                     TableSectionData summarySection = tableData.GetSectionData(SectionType.Summary);
                     if (summarySection != null && summarySection.NumberOfRows > 0)

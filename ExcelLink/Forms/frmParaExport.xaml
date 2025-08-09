@@ -113,7 +113,7 @@
                           Content="{Binding CategoryName}"
                           Margin="2"
                           FontWeight="{Binding FontWeight}"
-                          Foreground="{Binding TextColor}"
+                           Foreground="{Binding TextColor}"
                           Checked="CategoryCheckBox_Changed"
                           Unchecked="CategoryCheckBox_Changed"/>
             </StackPanel>
@@ -150,11 +150,11 @@
                 <TextBlock Text="Excel Link" FontWeight="Bold" FontSize="14"
                            VerticalAlignment="Center" HorizontalAlignment="Left" />
                 <Button Grid.Column="1" Content="_" Width="25" Height="25" Padding="0"
-                        FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
+                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMinimize_Click"/>
                 <Button x:Name="btnMaximize" Grid.Column="2" Content="🗖" Width="25" Height="25" Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
-                        HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMaximize_Click"/>
+                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnMaximize_Click"/>
                 <Button Grid.Column="3" Content="X" Width="25" Height="25" Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="btnClose_Click"/>
@@ -348,7 +348,6 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
@@ -382,13 +381,8 @@
                         </TextBox.Resources>
                     </TextBox>
 
-                    <StackPanel Grid.Column="0" Grid.Row="2" Orientation="Horizontal" Margin="0,0,5,5">
-                        <CheckBox x:Name="chkIncludeHeaders" Content="Include Headers" IsChecked="True" VerticalAlignment="Center" Margin="0,0,10,0" />
-                        <CheckBox x:Name="chkIncludeGrandTotals" Content="Include Grand Totals" IsChecked="True" VerticalAlignment="Center" />
-                    </StackPanel>
-
                     <Border Grid.Column="0"
-                            Grid.Row="3"
+                            Grid.Row="2"
                             Margin="0,0,5,0"
                             BorderThickness="1"
                             BorderBrush="#CCCCCC"
@@ -403,10 +397,10 @@
                                   ItemTemplate="{StaticResource ScheduleItemTemplate}"/>
                     </Border>
 
-                    <TextBlock x:Name="txtSelectedSchedulesCount" Grid.Column="0" Grid.Row="4" 
+                    <TextBlock x:Name="txtSelectedSchedulesCount" Grid.Column="0" Grid.Row="3" 
                                Text="No schedules selected" HorizontalAlignment="Left" Margin="0,5,5,0" />
 
-                    <Grid Grid.Column="1" Grid.Row="0" Grid.RowSpan="5" Margin="5,0,0,0">
+                    <Grid Grid.Column="1" Grid.Row="0" Grid.RowSpan="4" Margin="5,0,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
