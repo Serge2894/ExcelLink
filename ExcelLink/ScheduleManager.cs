@@ -221,7 +221,8 @@ namespace ExcelLink.Common
             titleRange.Font.Size = 14;
             titleRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
             titleRange.VerticalAlignment = Excel.XlVAlign.xlVAlignCenter;
-            titleRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#E0E0E0"));
+            // CHANGED: Title background color to yellow
+            titleRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
             startRow++;
 
             // Header Row
@@ -237,6 +238,14 @@ namespace ExcelLink.Common
                 }
                 startRow++;
             }
+
+            // ADDED: Empty grey row after header
+            Excel.Range greyRowRange = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
+            greyRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC")); // Light grey color
+            greyRowRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+            greyRowRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
+            startRow++;
+
 
             // Body Data Rows
             for (int row = 0; row < scheduleData.BodyRows.Count; row++)

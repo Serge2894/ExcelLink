@@ -430,7 +430,6 @@ namespace ExcelLink.Forms
 
         private void ExportSchedulesToExcel()
         {
-            // Validate selections
             if (!SelectedSchedules.Any())
             {
                 frmInfoDialog infoDialog = new frmInfoDialog("Please select at least one schedule.");
@@ -438,73 +437,50 @@ namespace ExcelLink.Forms
                 return;
             }
 
-            // Prompt user to save Excel file
             SaveFileDialog saveDialog = new SaveFileDialog();
             saveDialog.Filter = "Excel files|*.xlsx";
             saveDialog.Title = "Save Revit Schedules to Excel";
+            saveDialog.FileName = $"{_doc.Title}_Schedules.xlsx";
 
-            string defaultFileName = _doc.Title;
-            if (string.IsNullOrEmpty(defaultFileName))
+            if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            string excelFile = saveDialog.FileName;
+
+            ShowProgressBar();
+
+            var schedulesToExport = SelectedSchedules.ToList();
+            bool includeHeaders = chkIncludeHeaders.IsChecked ?? true;
+            bool includeGrandTotals = chkIncludeGrandTotals.IsChecked ?? true;
+
+            List<SimpleScheduleData> scheduleData;
+            try
             {
-                defaultFileName = "RevitScheduleExport";
+                scheduleData = _scheduleManager.GetScheduleDataForExport(schedulesToExport, includeHeaders, includeGrandTotals);
             }
-            saveDialog.FileName = defaultFileName + "_Schedules.xlsx";
-
-            if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+            catch (Exception ex)
             {
+                HideProgressBar();
+                TaskDialog.Show("Error", $"Failed to read schedule data:\n{ex.Message}");
                 return;
             }
 
-            string excelFile = saveDialog.FileName;
-
-            // Show progress bar
-            ShowProgressBar();
-
             Task.Run(() =>
             {
-                Excel.Application excel = null;
-                Excel.Workbook workbook = null;
-                bool exportSuccess = false;
-
                 try
                 {
-                    excel = new Excel.Application();
-                    workbook = excel.Workbooks.Add();
-
-                    // Remove default sheets except the first one
-                    while (workbook.Worksheets.Count > 1)
+                    _scheduleManager.ExportSchedulesToExcel(scheduleData, excelFile, (progress) =>
                     {
-                        ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
-                    }
-
-                    // Store references
-                    _exportedExcelApp = excel;
-                    _exportedExcelWorkbook = workbook;
-
-                    bool includeHeaders = chkIncludeHeaders.IsChecked ?? true;
-                    bool includeGrandTotals = chkIncludeGrandTotals.IsChecked ?? true;
-
-                    _scheduleManager.ExportSchedulesToExcel(
-                        SelectedSchedules,
-                        excelFile,
-                        (progress) => Dispatcher.Invoke(() => UpdateProgressBar(progress)),
-                        includeHeaders,
-                        includeGrandTotals
-                    );
+                        Dispatcher.Invoke(() => UpdateProgressBar(progress));
+                    });
 
                     _postProgressAction = () =>
                     {
-                        frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully");
+                        frmInfoDialog infoDialog = new frmInfoDialog("Schedules exported successfully.");
                         infoDialog.ShowDialog();
-                        if (_exportedExcelApp != null)
-                        {
-                            _exportedExcelApp.Visible = true;
-                        }
                         HideProgressBar();
+                        Process.Start(excelFile);
                     };
 
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
-                    exportSuccess = true;
                 }
                 catch (Exception ex)
                 {
@@ -514,17 +490,9 @@ namespace ExcelLink.Forms
                         TaskDialog.Show("Error", $"Failed to export schedules:\n{ex.Message}");
                     });
                 }
-                finally
-                {
-                    if (!exportSuccess)
-                    {
-                        // Clean up COM objects on failure
-                        if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                        if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
-                    }
-                }
             });
         }
+
 
         public void HandleImportCompletion()
         {
