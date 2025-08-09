@@ -388,8 +388,8 @@ namespace ExcelLink.Forms
 
         private void txtScheduleSearch_GotFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
-            if (textBox != null && textBox.Text == "Search schedules...")
+            System.Windows.Forms.TextBox textBox = sender as System.Windows.Forms.TextBox;
+            if (textBox != null && textBox.Text == "search schedules...")
             {
                 textBox.Text = "";
             }
@@ -397,7 +397,7 @@ namespace ExcelLink.Forms
 
         private void txtScheduleSearch_LostFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
+            System.Windows.Forms.TextBox textBox = sender as System.Windows.Forms.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
                 textBox.Text = "Search schedules...";
@@ -475,6 +475,28 @@ namespace ExcelLink.Forms
                     };
 
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
+                }
+                // MODIFIED: Added specific catch for COMException to handle open files
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    // Check for HRESULT 0x800A03EC, which indicates the file is in use
+                    if (ex.HResult == unchecked((int)0x800A03EC))
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            HideProgressBar();
+                            frmInfoDialog infoDialog = new frmInfoDialog("The Excel file is already open.\nPlease close it and try again.");
+                            infoDialog.ShowDialog();
+                        });
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            HideProgressBar();
+                            TaskDialog.Show("Error", $"An Excel error occurred:\n{ex.Message}");
+                        });
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -677,6 +699,27 @@ namespace ExcelLink.Forms
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
                     exportSuccess = true;
                 }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    if (ex.HResult == unchecked((int)0x800A03EC))
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            HideProgressBar();
+                            frmInfoDialog infoDialog = new frmInfoDialog("The Excel file is already open.\nPlease close it and try again.");
+                            infoDialog.ShowDialog();
+                        });
+                    }
+                    else
+                    {
+                        if (_exportedExcelApp != null) _exportedExcelApp.DisplayAlerts = true;
+                        Dispatcher.Invoke(() =>
+                        {
+                            HideProgressBar();
+                            TaskDialog.Show("Error", $"An Excel error occurred:\n{ex.Message}");
+                        });
+                    }
+                }
                 catch (Exception ex)
                 {
                     if (_exportedExcelApp != null) _exportedExcelApp.DisplayAlerts = true;
@@ -851,7 +894,6 @@ namespace ExcelLink.Forms
             {
                 if (parameterMap.ContainsKey(paramName))
                 {
-                    // FIXED: Replaced GetValueOrDefault with ContainsKey check
                     bool isReadOnly = isReadOnlyMap.ContainsKey(paramName) ? isReadOnlyMap[paramName] : false;
                     bool isTypeParam = isTypeParamMap.ContainsKey(paramName) ? isTypeParamMap[paramName] : false;
 
@@ -929,13 +971,13 @@ namespace ExcelLink.Forms
 
         private void txtCategorySearch_GotFocus(object sender, RoutedEventArgs e)
         {
-            var textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Forms.TextBox;
             if (textBox != null && textBox.Text == "Search categories...") textBox.Text = "";
         }
 
         private void txtCategorySearch_LostFocus(object sender, RoutedEventArgs e)
         {
-            var textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Forms.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
                 textBox.Text = "Search categories...";
@@ -964,13 +1006,13 @@ namespace ExcelLink.Forms
 
         private void txtParameterSearch_GotFocus(object sender, RoutedEventArgs e)
         {
-            var textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Forms.TextBox;
             if (textBox != null && textBox.Text == "Search parameters...") textBox.Text = "";
         }
 
         private void txtParameterSearch_LostFocus(object sender, RoutedEventArgs e)
         {
-            var textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Forms.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
                 textBox.Text = "Search parameters...";
@@ -1257,32 +1299,39 @@ namespace ExcelLink.Forms
             legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
             legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-            ((Excel.Range)colorLegendSheet.Cells[4, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
-            ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Parameter does not exist for this element";
-            ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Do not fill or edit cell";
+            ((Excel.Range)colorLegendSheet.Cells[4, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+            ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Type value";
+            ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Type parameters with the same ID should be filled the same";
 
-            ((Excel.Range)colorLegendSheet.Cells[5, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
-            ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Type value";
-            ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Type parameters with the same ID should be filled the same";
+            ((Excel.Range)colorLegendSheet.Cells[5, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+            ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Read-only value";
+            ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Uneditable cell";
 
-            ((Excel.Range)colorLegendSheet.Cells[6, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
-            ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Read-only value";
-            ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Uneditable cell";
+            ((Excel.Range)colorLegendSheet.Cells[6, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+            ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Parameter does not exist for element";
+            ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Applies to Category export only";
 
-            Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[6, 4]];
+            ((Excel.Range)colorLegendSheet.Cells[7, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
+            ((Excel.Range)colorLegendSheet.Cells[7, 3]).Value2 = "Title / Main Header Row";
+            ((Excel.Range)colorLegendSheet.Cells[7, 4]).Value2 = "Indicates a title or header row";
+
+            ((Excel.Range)colorLegendSheet.Cells[8, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+            ((Excel.Range)colorLegendSheet.Cells[8, 3]).Value2 = "Separator / Index / Group Header or Blank Line";
+            ((Excel.Range)colorLegendSheet.Cells[8, 4]).Value2 = "Indicates a separator, index row, or a schedule group header/footer/blank line";
+
+            Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[8, 4]];
             dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
             dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-            Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 4]];
+            Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[8, 4]];
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
 
             ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
-            ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 40;
+            ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 35;
             ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
-            colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 2]].HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
         }
         #endregion
 
