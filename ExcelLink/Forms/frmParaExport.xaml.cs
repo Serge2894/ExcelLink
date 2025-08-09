@@ -128,10 +128,16 @@ namespace ExcelLink.Forms
             lvSelectedParameters.ItemsSource = SelectedParameterItems;
             lvSchedules.ItemsSource = ScheduleItems;
             lvScheduleParameters.ItemsSource = ScheduleParameterItems;
+
+            // Set initial placeholder states
+            txtCategorySearch.Foreground = System.Windows.Media.Brushes.Gray;
+            txtParameterSearch.Foreground = System.Windows.Media.Brushes.Gray;
+            txtScheduleSearch.Foreground = System.Windows.Media.Brushes.Gray;
         }
 
         #endregion
 
+        // ... (Progress Bar, Window Controls, Main Button Events methods are unchanged) ...
         #region Progress Bar Methods
 
         private void ProgressTimer_Tick(object sender, EventArgs e)
@@ -375,12 +381,11 @@ namespace ExcelLink.Forms
 
         private void txtScheduleSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
-            if (textBox != null && textBox.IsFocused)
+            var textBox = sender as System.Windows.Controls.TextBox;
+            // Only filter if the text is not the placeholder
+            if (textBox != null && textBox.IsFocused && textBox.Text != "Search schedules...")
             {
                 string searchText = textBox.Text.ToLower();
-                if (searchText == "search schedules...") return;
-
                 var filteredItems = ScheduleItems.Where(s => s.IsSelectAll || s.ScheduleName.ToLower().Contains(searchText));
                 lvSchedules.ItemsSource = new ObservableCollection<ScheduleItem>(filteredItems);
             }
@@ -388,19 +393,21 @@ namespace ExcelLink.Forms
 
         private void txtScheduleSearch_GotFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Forms.TextBox textBox = sender as System.Windows.Forms.TextBox;
-            if (textBox != null && textBox.Text == "search schedules...")
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && textBox.Text == "Search schedules...")
             {
                 textBox.Text = "";
+                textBox.Foreground = System.Windows.Media.Brushes.Black;
             }
         }
 
         private void txtScheduleSearch_LostFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Forms.TextBox textBox = sender as System.Windows.Forms.TextBox;
+            var textBox = sender as System.Windows.Controls.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
                 textBox.Text = "Search schedules...";
+                textBox.Foreground = System.Windows.Media.Brushes.Gray;
                 lvSchedules.ItemsSource = ScheduleItems;
             }
         }
@@ -408,18 +415,17 @@ namespace ExcelLink.Forms
         #endregion
 
         #region INotifyPropertyChanged
-
+        // ... (unchanged)
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-
         #endregion
 
         #region Schedule Export/Import
-
+        // ... (unchanged)
         private void ExportSchedulesToExcel()
         {
             if (!SelectedSchedules.Any())
@@ -476,10 +482,8 @@ namespace ExcelLink.Forms
 
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
                 }
-                // MODIFIED: Added specific catch for COMException to handle open files
                 catch (System.Runtime.InteropServices.COMException ex)
                 {
-                    // Check for HRESULT 0x800A03EC, which indicates the file is in use
                     if (ex.HResult == unchecked((int)0x800A03EC))
                     {
                         Dispatcher.Invoke(() =>
@@ -596,10 +600,72 @@ namespace ExcelLink.Forms
                 }
             });
         }
-
         #endregion
 
         #region Category and Parameter Logic
+
+        private void txtCategorySearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && textBox.IsFocused && textBox.Text != "Search categories...")
+            {
+                string searchText = textBox.Text.ToLower();
+                var filteredItems = CategoryItems.Where(c => c.IsSelectAll || c.CategoryName.ToLower().Contains(searchText));
+                lvCategories.ItemsSource = new ObservableCollection<ParaExportCategoryItem>(filteredItems);
+            }
+        }
+
+        private void txtCategorySearch_GotFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && textBox.Text == "Search categories...")
+            {
+                textBox.Text = "";
+                textBox.Foreground = System.Windows.Media.Brushes.Black;
+            }
+        }
+
+        private void txtCategorySearch_LostFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                textBox.Text = "Search categories...";
+                textBox.Foreground = System.Windows.Media.Brushes.Gray;
+                lvCategories.ItemsSource = CategoryItems;
+            }
+        }
+
+        private void txtParameterSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if ((sender as System.Windows.Controls.TextBox)?.IsFocused == true && (sender as System.Windows.Controls.TextBox).Text != "Search parameters...")
+            {
+                ApplyParameterFilter();
+            }
+        }
+
+        private void txtParameterSearch_GotFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && textBox.Text == "Search parameters...")
+            {
+                textBox.Text = "";
+                textBox.Foreground = System.Windows.Media.Brushes.Black;
+            }
+        }
+
+        private void txtParameterSearch_LostFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                textBox.Text = "Search parameters...";
+                textBox.Foreground = System.Windows.Media.Brushes.Gray;
+                ApplyParameterFilter();
+            }
+        }
+
+        // ... (The rest of the file is unchanged)
         private void ExportToExcel()
         {
             if (!SelectedCategoryNames.Any())
@@ -957,34 +1023,6 @@ namespace ExcelLink.Forms
             }
         }
 
-        private void txtCategorySearch_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            var textBox = sender as System.Windows.Controls.TextBox;
-            if (textBox != null && textBox.IsFocused)
-            {
-                string searchText = textBox.Text.ToLower();
-                if (searchText == "search categories...") return;
-                var filteredItems = CategoryItems.Where(c => c.IsSelectAll || c.CategoryName.ToLower().Contains(searchText));
-                lvCategories.ItemsSource = new ObservableCollection<ParaExportCategoryItem>(filteredItems);
-            }
-        }
-
-        private void txtCategorySearch_GotFocus(object sender, RoutedEventArgs e)
-        {
-            var textBox = sender as System.Windows.Forms.TextBox;
-            if (textBox != null && textBox.Text == "Search categories...") textBox.Text = "";
-        }
-
-        private void txtCategorySearch_LostFocus(object sender, RoutedEventArgs e)
-        {
-            var textBox = sender as System.Windows.Forms.TextBox;
-            if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
-            {
-                textBox.Text = "Search categories...";
-                lvCategories.ItemsSource = CategoryItems;
-            }
-        }
-
         private void ApplyParameterFilter()
         {
             string searchText = txtParameterSearch.Text.ToLower();
@@ -996,27 +1034,6 @@ namespace ExcelLink.Forms
             {
                 var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
                 lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
-            }
-        }
-
-        private void txtParameterSearch_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if ((sender as System.Windows.Controls.TextBox)?.IsFocused == true) ApplyParameterFilter();
-        }
-
-        private void txtParameterSearch_GotFocus(object sender, RoutedEventArgs e)
-        {
-            var textBox = sender as System.Windows.Forms.TextBox;
-            if (textBox != null && textBox.Text == "Search parameters...") textBox.Text = "";
-        }
-
-        private void txtParameterSearch_LostFocus(object sender, RoutedEventArgs e)
-        {
-            var textBox = sender as System.Windows.Forms.TextBox;
-            if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
-            {
-                textBox.Text = "Search parameters...";
-                ApplyParameterFilter();
             }
         }
 
