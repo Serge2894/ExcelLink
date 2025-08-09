@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Height="600" Width="1200" MinWidth="900" MinHeight="600"
+        Height="600" Width="900" MinWidth="900" MinHeight="600"
         Background="#F5F5F5"
         WindowStyle="None"
         WindowStartupLocation="CenterScreen">
@@ -147,7 +147,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Parameter Export/Import" FontWeight="Bold" FontSize="14"
+                <TextBlock Text="Excel Link" FontWeight="Bold" FontSize="14"
                            VerticalAlignment="Center" HorizontalAlignment="Left" />
                 <Button Grid.Column="1" Content="_" Width="25" Height="25" Padding="0"
                         FontWeight="Bold" FontSize="12" Background="Transparent" BorderThickness="0"
@@ -404,7 +404,7 @@
                     </Border>
 
                     <TextBlock x:Name="txtSelectedSchedulesCount" Grid.Column="0" Grid.Row="4" 
-                               Text="No schedules selected" HorizontalAlignment="Right" Margin="0,5,5,0" />
+                               Text="No schedules selected" HorizontalAlignment="Left" Margin="0,5,5,0" />
 
                     <Grid Grid.Column="1" Grid.Row="0" Grid.RowSpan="5" Margin="5,0,0,0">
                         <Grid.RowDefinitions>
