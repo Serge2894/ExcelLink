@@ -329,55 +329,63 @@ namespace ExcelLink.Forms
 
             if (!selectedSchedules.Any()) return;
 
-            var parameterNames = new HashSet<string>();
-            var parameterMap = new Dictionary<string, Parameter>();
-            var isReadOnlyMap = new Dictionary<string, bool>();
-            var isTypeParamMap = new Dictionary<string, bool>();
+            var allParameterItems = new List<ParaExportParameterItem>();
+            var processedParamNames = new HashSet<string>();
 
             foreach (var schedule in selectedSchedules)
             {
                 var definition = schedule.Definition;
                 var sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
-                if (sampleElement == null) continue;
+                Element sampleTypeElement = null;
+                if (sampleElement != null)
+                {
+                    sampleTypeElement = _doc.GetElement(sampleElement.GetTypeId());
+                }
 
                 for (int i = 0; i < definition.GetFieldCount(); i++)
                 {
                     var field = definition.GetField(i);
                     var paramName = field.GetName();
 
-                    if (parameterNames.Contains(paramName)) continue;
+                    if (processedParamNames.Contains(paramName)) continue;
 
-                    Parameter param = sampleElement.LookupParameter(paramName);
+                    processedParamNames.Add(paramName);
+
+                    Parameter param = null;
                     bool isType = false;
+                    bool isReadOnly = false;
 
-                    if (param == null)
+                    if (sampleElement != null)
                     {
-                        var typeElement = _doc.GetElement(sampleElement.GetTypeId());
-                        if (typeElement != null)
+                        param = _scheduleManager.GetParameterByField(sampleElement, field);
+                        if (param == null && sampleTypeElement != null)
                         {
-                            param = typeElement.LookupParameter(paramName);
+                            param = _scheduleManager.GetParameterByField(sampleTypeElement, field);
                             isType = true;
                         }
                     }
 
                     if (param != null)
                     {
-                        parameterNames.Add(paramName);
-                        parameterMap[paramName] = param;
-                        isReadOnlyMap[paramName] = param.IsReadOnly;
-                        isTypeParamMap[paramName] = isType;
+                        isReadOnly = param.IsReadOnly;
+                        allParameterItems.Add(new ParaExportParameterItem(param, isReadOnly, isType));
+                    }
+                    else
+                    {
+                        // Handle non-parameter fields like 'Count' or calculated fields
+                        allParameterItems.Add(new ParaExportParameterItem(paramName));
                     }
                 }
             }
 
-            foreach (var paramName in parameterNames.OrderBy(p => p))
+            // Sort and update the UI collection
+            var sortedItems = allParameterItems.OrderBy(p => p.ParameterName);
+            foreach (var item in sortedItems)
             {
-                ScheduleParameterItems.Add(new ParaExportParameterItem(
-                    parameterMap[paramName],
-                    isReadOnlyMap[paramName],
-                    isTypeParamMap[paramName]));
+                ScheduleParameterItems.Add(item);
             }
         }
+
 
         private void txtScheduleSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -1408,6 +1416,15 @@ namespace ExcelLink.Forms
                 ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FFE699"));
             else
                 ParameterColor = new SolidColorBrush(Colors.White);
+        }
+
+        // Constructor for non-parameter fields like "Count"
+        public ParaExportParameterItem(string parameterName)
+        {
+            Parameter = null;
+            ParameterName = parameterName;
+            // Treat as read-only
+            ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FF4747"));
         }
     }
 

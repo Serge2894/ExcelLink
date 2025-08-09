@@ -289,7 +289,7 @@ namespace ExcelLink.Common
         /// <summary>
         /// Get parameter from element based on schedule field
         /// </summary>
-        private Parameter GetParameterByField(Element element, ScheduleField field)
+        public Parameter GetParameterByField(Element element, ScheduleField field)
         {
             if (element == null || field == null)
                 return null;
