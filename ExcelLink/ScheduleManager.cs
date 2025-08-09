@@ -30,6 +30,9 @@ namespace ExcelLink.Common
         public List<ColumnProperty> ColumnProperties { get; set; }
         public List<List<string>> BodyRows { get; set; }
         public List<List<string>> SummaryRows { get; set; }
+        public List<bool> IsGroupHeaderOrFooterRow { get; set; }
+        // ADDED: Property to identify blank line separator rows
+        public List<bool> IsBlankLineRow { get; set; }
     }
 
     public class ScheduleManager
@@ -41,9 +44,6 @@ namespace ExcelLink.Common
             _doc = doc;
         }
 
-        /// <summary>
-        /// Gets all schedules in the document
-        /// </summary>
         public List<ViewSchedule> GetAllSchedules()
         {
             FilteredElementCollector collector = new FilteredElementCollector(_doc);
@@ -57,10 +57,6 @@ namespace ExcelLink.Common
             return schedules;
         }
 
-        /// <summary>
-        /// Reads data from Revit schedules and stores it in a simple data structure.
-        /// This method MUST be called from the main Revit thread.
-        /// </summary>
         public List<SimpleScheduleData> GetScheduleDataForExport(List<ViewSchedule> schedules, bool includeHeaders, bool includeGrandTotals)
         {
             var allScheduleData = new List<SimpleScheduleData>();
@@ -74,33 +70,49 @@ namespace ExcelLink.Common
                     ColumnLetters = new List<string>(),
                     ColumnProperties = new List<ColumnProperty>(),
                     BodyRows = new List<List<string>>(),
-                    SummaryRows = new List<List<string>>()
+                    SummaryRows = new List<List<string>>(),
+                    IsGroupHeaderOrFooterRow = new List<bool>(),
+                    // ADDED: Initialize the new list
+                    IsBlankLineRow = new List<bool>()
                 };
 
                 ScheduleDefinition definition = schedule.Definition;
                 TableData tableData = schedule.GetTableData();
                 TableSectionData bodySection = tableData.GetSectionData(SectionType.Body);
-                int numberOfRows = bodySection.NumberOfRows;
-                int numberOfColumns = bodySection.NumberOfColumns;
 
-                // Get a sample element to check parameter properties
+                var visibleFields = new List<ScheduleField>();
+                for (int i = 0; i < definition.GetFieldCount(); i++)
+                {
+                    var field = definition.GetField(i);
+                    if (!field.IsHidden)
+                    {
+                        visibleFields.Add(field);
+                    }
+                }
+
+                int numberOfRows = bodySection.NumberOfRows;
+                int numberOfColumns = visibleFields.Count > 0 ? visibleFields.Count : bodySection.NumberOfColumns;
+
+                if (numberOfColumns != bodySection.NumberOfColumns)
+                {
+                    numberOfColumns = bodySection.NumberOfColumns;
+                }
+
                 Element sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
                 Element sampleTypeElement = sampleElement != null ? _doc.GetElement(sampleElement.GetTypeId()) : null;
 
-                // Get Column Headers, Letters, and Properties
                 if (includeHeaders)
                 {
-                    TableSectionData headerSection = tableData.GetSectionData(SectionType.Header);
-                    if (headerSection != null && headerSection.NumberOfRows > 0)
+                    for (int colIdx = 0; colIdx < numberOfColumns; colIdx++)
                     {
-                        for (int col = 0; col < numberOfColumns; col++)
-                        {
-                            simpleData.Headers.Add(schedule.GetCellText(SectionType.Header, 0, col));
-                            simpleData.ColumnLetters.Add(GetExcelColumnName(col + 1));
+                        simpleData.Headers.Add(schedule.GetCellText(SectionType.Header, 0, colIdx));
+                        simpleData.ColumnLetters.Add(GetExcelColumnName(colIdx + 1));
 
-                            var field = definition.GetField(col);
+                        if (colIdx < visibleFields.Count)
+                        {
+                            var field = visibleFields[colIdx];
                             string paramName = field.GetName();
-                            var colProp = new ColumnProperty { IsReadOnly = true, IsType = false }; // Default to read-only for calculated/special fields
+                            var colProp = new ColumnProperty { IsReadOnly = true, IsType = false };
 
                             if (sampleElement != null)
                             {
@@ -122,10 +134,13 @@ namespace ExcelLink.Common
                             }
                             simpleData.ColumnProperties.Add(colProp);
                         }
+                        else
+                        {
+                            simpleData.ColumnProperties.Add(new ColumnProperty { IsReadOnly = true, IsType = false });
+                        }
                     }
                 }
 
-                // Read body rows
                 for (int row = 0; row < numberOfRows; row++)
                 {
                     var rowData = new List<string>();
@@ -136,7 +151,34 @@ namespace ExcelLink.Common
                     simpleData.BodyRows.Add(rowData);
                 }
 
-                // Read grand totals (summary)
+                foreach (var rowData in simpleData.BodyRows)
+                {
+                    // MODIFIED: Logic now checks for blank lines first
+                    bool isBlank = rowData.All(string.IsNullOrWhiteSpace);
+                    simpleData.IsBlankLineRow.Add(isBlank);
+
+                    // Headers/Footers are only identified if the row is NOT a blank line
+                    if (isBlank)
+                    {
+                        simpleData.IsGroupHeaderOrFooterRow.Add(false);
+                        continue;
+                    }
+
+                    int nonEmptyCount = rowData.Count(c => !string.IsNullOrWhiteSpace(c));
+                    bool isHeaderOrFooter;
+
+                    if (numberOfColumns > 2)
+                    {
+                        isHeaderOrFooter = (nonEmptyCount > 0 && nonEmptyCount <= 2);
+                    }
+                    else
+                    {
+                        isHeaderOrFooter = (nonEmptyCount == 1);
+                    }
+                    simpleData.IsGroupHeaderOrFooterRow.Add(isHeaderOrFooter);
+                }
+
+
                 if (includeGrandTotals)
                 {
                     TableSectionData summarySection = tableData.GetSectionData(SectionType.Summary);
@@ -158,10 +200,6 @@ namespace ExcelLink.Common
             return allScheduleData;
         }
 
-        /// <summary>
-        /// Exports the pre-processed simple schedule data to Excel.
-        /// This method contains no Revit API calls and is safe to run on a background thread.
-        /// </summary>
         public void ExportSchedulesToExcel(List<SimpleScheduleData> allScheduleData, string excelFilePath, Action<int> progressCallback)
         {
             Excel.Application excel = null;
@@ -192,6 +230,8 @@ namespace ExcelLink.Common
                     progressCallback?.Invoke(Math.Min(percentage, 100));
                 }
 
+                colorLegendSheet.Activate();
+
                 excel.DisplayAlerts = false;
                 workbook.SaveAs(excelFilePath);
             }
@@ -205,15 +245,11 @@ namespace ExcelLink.Common
             }
         }
 
-        /// <summary>
-        /// Helper method to write data from a SimpleScheduleData object to a worksheet.
-        /// </summary>
         private void ExportSimpleScheduleToWorksheet(SimpleScheduleData scheduleData, Excel.Worksheet worksheet)
         {
             int currentColCount = Math.Max(1, scheduleData.Headers.Any() ? scheduleData.Headers.Count : (scheduleData.BodyRows.FirstOrDefault()?.Count ?? 1));
             int startRow = 1;
 
-            // Merged Title Row
             Excel.Range titleRange = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
             titleRange.Merge();
             titleRange.Value2 = scheduleData.Name;
@@ -221,11 +257,21 @@ namespace ExcelLink.Common
             titleRange.Font.Size = 14;
             titleRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
             titleRange.VerticalAlignment = Excel.XlVAlign.xlVAlignCenter;
-            // CHANGED: Title background color to yellow
             titleRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
             startRow++;
 
-            // Header Row
+            Excel.Range indexRow = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
+            indexRow.Font.Bold = true;
+            indexRow.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+            indexRow.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+            indexRow.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+            for (int col = 0; col < currentColCount; col++)
+            {
+                var cell = (Excel.Range)worksheet.Cells[startRow, col + 1];
+                cell.Value2 = GetExcelColumnName(col + 1);
+            }
+            startRow++;
+
             if (scheduleData.Headers.Any())
             {
                 for (int col = 0; col < scheduleData.Headers.Count; col++)
@@ -233,26 +279,29 @@ namespace ExcelLink.Common
                     Excel.Range headerCell = (Excel.Range)worksheet.Cells[startRow, col + 1];
                     headerCell.Value2 = scheduleData.Headers[col];
                     headerCell.Font.Bold = true;
-                    headerCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
                     headerCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                 }
                 startRow++;
             }
 
-            // ADDED: Empty grey row after header
-            Excel.Range greyRowRange = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
-            greyRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC")); // Light grey color
-            greyRowRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
-            greyRowRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
+            Excel.Range greyRowSeparator = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
+            greyRowSeparator.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
             startRow++;
 
-
-            // Body Data Rows
             for (int row = 0; row < scheduleData.BodyRows.Count; row++)
             {
                 var currentRowData = scheduleData.BodyRows[row];
-                bool isEmptyRow = currentRowData.All(string.IsNullOrWhiteSpace);
                 int currentRowInExcel = startRow + row;
+
+                // MODIFIED: Prioritized logic for blank and header/footer rows
+                bool isBlankLine = row < scheduleData.IsBlankLineRow.Count && scheduleData.IsBlankLineRow[row];
+                bool isHeaderOrFooter = row < scheduleData.IsGroupHeaderOrFooterRow.Count && scheduleData.IsGroupHeaderOrFooterRow[row];
+
+                if (isBlankLine || isHeaderOrFooter)
+                {
+                    Excel.Range specialRowRange = worksheet.Range[worksheet.Cells[currentRowInExcel, 1], worksheet.Cells[currentRowInExcel, currentColCount]];
+                    specialRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+                }
 
                 for (int col = 0; col < currentRowData.Count; col++)
                 {
@@ -261,16 +310,15 @@ namespace ExcelLink.Common
                     dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                     dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-                    if (isEmptyRow)
+                    // Apply individual cell coloring only if it's a regular data row
+                    if (!isBlankLine && !isHeaderOrFooter)
                     {
-                        Excel.Range rowRange = worksheet.Range[worksheet.Cells[currentRowInExcel, 1], worksheet.Cells[currentRowInExcel, currentColCount]];
-                        rowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D0D0D0"));
-                    }
-                    else if (col < scheduleData.ColumnProperties.Count)
-                    {
-                        var colProp = scheduleData.ColumnProperties[col];
-                        if (colProp.IsReadOnly) dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
-                        else if (colProp.IsType) dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+                        if (col < scheduleData.ColumnProperties.Count)
+                        {
+                            var colProp = scheduleData.ColumnProperties[col];
+                            if (colProp.IsReadOnly) dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+                            else if (colProp.IsType) dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+                        }
                     }
                 }
             }
@@ -297,10 +345,6 @@ namespace ExcelLink.Common
             return columnName;
         }
 
-
-        /// <summary>
-        /// Imports schedules from Excel
-        /// </summary>
         public List<ImportErrorItem> ImportSchedulesFromExcel(string excelFilePath, Action<int> progressCallback)
         {
             List<ImportErrorItem> errors = new List<ImportErrorItem>();
@@ -352,13 +396,9 @@ namespace ExcelLink.Common
                     System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
                 }
             }
-
             return errors;
         }
 
-        /// <summary>
-        /// Imports data from worksheet to schedule
-        /// </summary>
         private List<ImportErrorItem> ImportScheduleFromWorksheet(ViewSchedule schedule, Excel.Worksheet worksheet)
         {
             List<ImportErrorItem> errors = new List<ImportErrorItem>();
@@ -366,7 +406,7 @@ namespace ExcelLink.Common
             IList<ScheduleFieldId> fieldIds = definition.GetFieldOrder();
             Excel.Range usedRange = worksheet.UsedRange;
             int excelRows = usedRange.Rows.Count;
-            int startRow = 3; // Start from row 3 to skip Title and Headers
+            int startRow = 5;
 
             for (int i = startRow; i <= excelRows; i++)
             {
@@ -410,9 +450,6 @@ namespace ExcelLink.Common
             return errors;
         }
 
-        /// <summary>
-        /// Finds schedule by name
-        /// </summary>
         private ViewSchedule FindScheduleByName(string name)
         {
             FilteredElementCollector collector = new FilteredElementCollector(_doc);
@@ -422,9 +459,6 @@ namespace ExcelLink.Common
                 .FirstOrDefault(s => s.Name == name || (s.Name.Length > 31 && s.Name.Substring(0, 31) == name));
         }
 
-        /// <summary>
-        /// Finds element from schedule based on key value
-        /// </summary>
         private Element FindElementFromSchedule(ViewSchedule schedule, string keyValue)
         {
             FilteredElementCollector collector = new FilteredElementCollector(_doc, schedule.Id);
@@ -445,15 +479,12 @@ namespace ExcelLink.Common
             return null;
         }
 
-        /// <summary>
-        /// Creates the color legend sheet
-        /// </summary>
         private void CreateColorLegendSheet(Excel.Worksheet colorLegendSheet)
         {
             colorLegendSheet.Name = "Color Legend";
             Excel.Range titleRange = colorLegendSheet.Range[colorLegendSheet.Cells[1, 2], colorLegendSheet.Cells[1, 4]];
             titleRange.Merge();
-            titleRange.Value2 = "Schedule Export Color Legend";
+            titleRange.Value2 = "Color Legend";
             titleRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
             titleRange.Font.Bold = true;
             titleRange.Font.Size = 14;
@@ -469,34 +500,39 @@ namespace ExcelLink.Common
             legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
             legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-            Excel.Range yellowCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
-            yellowCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
-            ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Header Row";
-            ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Column headers from schedule";
+            ((Excel.Range)colorLegendSheet.Cells[4, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+            ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Type value";
+            ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Type parameters with the same ID should be filled the same";
 
-            Excel.Range greyCell = (Excel.Range)colorLegendSheet.Cells[5, 2];
-            greyCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#E0E0E0"));
-            ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Summary/Total Row";
-            ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Grand totals or summary data";
+            ((Excel.Range)colorLegendSheet.Cells[5, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+            ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Read-only value";
+            ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Uneditable cell";
 
-            Excel.Range whiteCell = (Excel.Range)colorLegendSheet.Cells[6, 2];
-            whiteCell.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.White);
-            ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Data Row";
-            ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Regular schedule data";
+            ((Excel.Range)colorLegendSheet.Cells[6, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+            ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Parameter does not exist for element";
+            ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Applies to Category export only";
 
-            Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[6, 4]];
+            ((Excel.Range)colorLegendSheet.Cells[7, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
+            ((Excel.Range)colorLegendSheet.Cells[7, 3]).Value2 = "Title / Main Header Row";
+            ((Excel.Range)colorLegendSheet.Cells[7, 4]).Value2 = "Indicates a title or header row";
+
+            ((Excel.Range)colorLegendSheet.Cells[8, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+            ((Excel.Range)colorLegendSheet.Cells[8, 3]).Value2 = "Separator / Index / Group Header or Blank Line";
+            ((Excel.Range)colorLegendSheet.Cells[8, 4]).Value2 = "Indicates a separator, index row, or a schedule group header/footer/blank line";
+
+            Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[8, 4]];
             dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
             dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-            Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 4]];
+            Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[8, 4]];
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
 
             ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
-            ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 30;
-            ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 40;
+            ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 35;
+            ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
         }
     }
 

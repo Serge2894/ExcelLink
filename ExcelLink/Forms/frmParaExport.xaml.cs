@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
@@ -22,9 +23,6 @@ using Forms = System.Windows.Forms;
 
 namespace ExcelLink.Forms
 {
-    /// <summary>
-    /// Interaction with frmParaExport.xaml
-    /// </summary>
     public partial class frmParaExport : Window, INotifyPropertyChanged
     {
         private Document _doc;
@@ -34,6 +32,8 @@ namespace ExcelLink.Forms
         private ObservableCollection<ParaExportParameterItem> _availableParameterItems;
         private ObservableCollection<ParaExportParameterItem> _selectedParameterItems;
         private ObservableCollection<ScheduleItem> _scheduleItems;
+        private ObservableCollection<ParaExportParameterItem> _scheduleParameterItems;
+
         private ScheduleManager _scheduleManager;
         private bool _isMaximized = false;
         private DispatcherTimer _progressTimer;
@@ -42,7 +42,6 @@ namespace ExcelLink.Forms
         private System.Windows.Controls.TabControl _mainTabControl;
         private Action _postProgressAction;
 
-        // New variables to hold Excel references
         private Excel.Application _exportedExcelApp;
         private Excel.Workbook _exportedExcelWorkbook;
 
@@ -51,84 +50,49 @@ namespace ExcelLink.Forms
         public ObservableCollection<ParaExportCategoryItem> CategoryItems
         {
             get { return _categoryItems; }
-            set
-            {
-                _categoryItems = value;
-                OnPropertyChanged(nameof(CategoryItems));
-            }
+            set { _categoryItems = value; OnPropertyChanged(nameof(CategoryItems)); }
         }
 
         public ObservableCollection<ParaExportParameterItem> AvailableParameterItems
         {
             get { return _availableParameterItems; }
-            set
-            {
-                _availableParameterItems = value;
-                OnPropertyChanged(nameof(AvailableParameterItems));
-            }
+            set { _availableParameterItems = value; OnPropertyChanged(nameof(AvailableParameterItems)); }
         }
 
         public ObservableCollection<ParaExportParameterItem> SelectedParameterItems
         {
             get { return _selectedParameterItems; }
-            set
-            {
-                _selectedParameterItems = value;
-                OnPropertyChanged(nameof(SelectedParameterItems));
-            }
+            set { _selectedParameterItems = value; OnPropertyChanged(nameof(SelectedParameterItems)); }
         }
 
         public ObservableCollection<ScheduleItem> ScheduleItems
         {
             get { return _scheduleItems; }
-            set
-            {
-                _scheduleItems = value;
-                OnPropertyChanged(nameof(ScheduleItems));
-            }
+            set { _scheduleItems = value; OnPropertyChanged(nameof(ScheduleItems)); }
         }
 
-        public bool IsEntireModelChecked
+        public ObservableCollection<ParaExportParameterItem> ScheduleParameterItems
         {
-            get { return (bool)rbEntireModel.IsChecked; }
+            get { return _scheduleParameterItems; }
+            set { _scheduleParameterItems = value; OnPropertyChanged(nameof(ScheduleParameterItems)); }
         }
 
-        public bool IsActiveViewChecked
-        {
-            get { return (bool)rbActiveView.IsChecked; }
-        }
+        public bool IsEntireModelChecked => (bool)rbEntireModel.IsChecked;
+        public bool IsActiveViewChecked => (bool)rbActiveView.IsChecked;
 
-        public List<string> SelectedCategoryNames
-        {
-            get
-            {
-                return CategoryItems
-                    .Where(item => item.IsSelected && !item.IsSelectAll)
-                    .Select(item => item.CategoryName)
-                    .ToList();
-            }
-        }
+        public List<string> SelectedCategoryNames => CategoryItems
+            .Where(item => item.IsSelected && !item.IsSelectAll)
+            .Select(item => item.CategoryName)
+            .ToList();
 
-        public List<string> SelectedParameterNames
-        {
-            get
-            {
-                return SelectedParameterItems
-                    .Select(item => item.ParameterName)
-                    .ToList();
-            }
-        }
+        public List<string> SelectedParameterNames => SelectedParameterItems
+            .Select(item => item.ParameterName)
+            .ToList();
 
-        public List<ViewSchedule> SelectedSchedules
-        {
-            get
-            {
-                return ScheduleItems
-                    .Where(item => item.IsSelected && !item.IsSelectAll && item.Schedule != null)
-                    .Select(item => item.Schedule)
-                    .ToList();
-            }
-        }
+        public List<ViewSchedule> SelectedSchedules => ScheduleItems
+            .Where(item => item.IsSelected && !item.IsSelectAll && item.Schedule != null)
+            .Select(item => item.Schedule)
+            .ToList();
 
         #endregion
 
@@ -143,27 +107,27 @@ namespace ExcelLink.Forms
             _scheduleManager = new ScheduleManager(doc);
             DataContext = this;
 
-            // Initialize collections
             CategoryItems = new ObservableCollection<ParaExportCategoryItem>();
             AvailableParameterItems = new ObservableCollection<ParaExportParameterItem>();
             SelectedParameterItems = new ObservableCollection<ParaExportParameterItem>();
             ScheduleItems = new ObservableCollection<ScheduleItem>();
+            ScheduleParameterItems = new ObservableCollection<ParaExportParameterItem>();
 
-            // Initialize progress timer for smooth animation
-            _progressTimer = new DispatcherTimer();
-            _progressTimer.Interval = TimeSpan.FromMilliseconds(20);
+            _progressTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(20)
+            };
             _progressTimer.Tick += ProgressTimer_Tick;
 
-            // Find the TabControl
             _mainTabControl = this.FindName("mainTabControl") as System.Windows.Controls.TabControl;
 
-            // Load initial data
             LoadCategoriesBasedOnScope();
             LoadSchedules();
 
             lvAvailableParameters.ItemsSource = AvailableParameterItems;
             lvSelectedParameters.ItemsSource = SelectedParameterItems;
             lvSchedules.ItemsSource = ScheduleItems;
+            lvScheduleParameters.ItemsSource = ScheduleParameterItems;
         }
 
         #endregion
@@ -200,7 +164,6 @@ namespace ExcelLink.Forms
             var fillWidth = (containerWidth * percentage) / 100.0;
             progressBarFill.Width = fillWidth;
 
-            // Set the corner radius. Right side is rounded only at 100%.
             if (percentage >= 100)
             {
                 progressBarFill.CornerRadius = new CornerRadius(12.5);
@@ -229,7 +192,7 @@ namespace ExcelLink.Forms
             progressBarFill.Width = 0;
             progressBarFill.CornerRadius = new CornerRadius(12.5, 0, 0, 12.5);
             progressBarText.Text = "0%";
-            UpdateProgressBar(5); // Start with 5% to show activity
+            UpdateProgressBar(5);
         }
 
         public void HideProgressBar()
@@ -291,30 +254,24 @@ namespace ExcelLink.Forms
 
         private void btnExport_Click(object sender, RoutedEventArgs e)
         {
-            // Check which tab is active
-            if (_mainTabControl != null && _mainTabControl.SelectedIndex == 1)
+            if (_mainTabControl?.SelectedIndex == 1)
             {
-                // Schedules tab is active
                 ExportSchedulesToExcel();
             }
             else
             {
-                // Categories tab is active
                 ExportToExcel();
             }
         }
 
         private void btnImport_Click(object sender, RoutedEventArgs e)
         {
-            // Check which tab is active
-            if (_mainTabControl != null && _mainTabControl.SelectedIndex == 1)
+            if (_mainTabControl?.SelectedIndex == 1)
             {
-                // Schedules tab is active
                 ImportSchedulesFromExcel();
             }
             else
             {
-                // Categories tab is active
                 ImportFromExcel();
             }
         }
@@ -326,60 +283,94 @@ namespace ExcelLink.Forms
         private void LoadSchedules()
         {
             ScheduleItems.Clear();
-
-            // Add "Select All" item
             ScheduleItems.Add(new ScheduleItem("Select All Schedules", true));
-
-            // Get all schedules from the document
             var schedules = _scheduleManager.GetAllSchedules();
-
             foreach (var schedule in schedules)
             {
                 ScheduleItems.Add(new ScheduleItem(schedule));
             }
-
             UpdateSelectedSchedulesCount();
         }
 
         private void UpdateSelectedSchedulesCount()
         {
             var selectedCount = SelectedSchedules.Count;
-            if (selectedCount == 0)
-            {
-                txtSelectedSchedulesCount.Text = "No schedules selected";
-            }
-            else if (selectedCount == 1)
-            {
-                txtSelectedSchedulesCount.Text = "1 schedule selected";
-            }
-            else
-            {
-                txtSelectedSchedulesCount.Text = $"{selectedCount} schedules selected";
-            }
+            txtSelectedSchedulesCount.Text = selectedCount == 1 ? "1 schedule selected" : $"{selectedCount} schedules selected";
         }
 
         private void ScheduleCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             var checkBox = sender as System.Windows.Controls.CheckBox;
-            if (checkBox == null) return;
-
-            var scheduleItem = checkBox.DataContext as ScheduleItem;
-            if (scheduleItem == null) return;
-
-            if (scheduleItem.IsSelectAll)
+            if (checkBox?.DataContext is ScheduleItem scheduleItem)
             {
-                // Handle "Select All" checkbox
-                bool isChecked = checkBox.IsChecked ?? false;
-                foreach (var item in ScheduleItems)
+                if (scheduleItem.IsSelectAll)
                 {
-                    if (!item.IsSelectAll)
+                    bool isChecked = checkBox.IsChecked ?? false;
+                    foreach (var item in ScheduleItems.Where(i => !i.IsSelectAll))
                     {
                         item.IsSelected = isChecked;
                     }
                 }
+                UpdateSelectedSchedulesCount();
+                UpdateScheduleParameters();
+            }
+        }
+
+        private void UpdateScheduleParameters()
+        {
+            ScheduleParameterItems.Clear();
+            var selectedSchedules = SelectedSchedules;
+
+            if (!selectedSchedules.Any()) return;
+
+            var parameterNames = new HashSet<string>();
+            var parameterMap = new Dictionary<string, Parameter>();
+            var isReadOnlyMap = new Dictionary<string, bool>();
+            var isTypeParamMap = new Dictionary<string, bool>();
+
+            foreach (var schedule in selectedSchedules)
+            {
+                var definition = schedule.Definition;
+                var sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
+                if (sampleElement == null) continue;
+
+                for (int i = 0; i < definition.GetFieldCount(); i++)
+                {
+                    var field = definition.GetField(i);
+                    var paramName = field.GetName();
+
+                    if (parameterNames.Contains(paramName)) continue;
+
+                    Parameter param = sampleElement.LookupParameter(paramName);
+                    bool isType = false;
+
+                    if (param == null)
+                    {
+                        var typeElement = _doc.GetElement(sampleElement.GetTypeId());
+                        if (typeElement != null)
+                        {
+                            param = typeElement.LookupParameter(paramName);
+                            isType = true;
+                        }
+                    }
+
+                    if (param != null)
+                    {
+                        parameterNames.Add(paramName);
+                        parameterMap[paramName] = param;
+                        isReadOnlyMap[paramName] = param.IsReadOnly;
+                        isTypeParamMap[paramName] = isType;
+                    }
+                }
             }
 
-            UpdateSelectedSchedulesCount();
+            foreach (var paramName in parameterNames.OrderBy(p => p))
+            {
+                ScheduleParameterItems.Add(new ParaExportParameterItem(
+                    parameterMap[paramName],
+                    isReadOnlyMap[paramName],
+                    isTypeParamMap[paramName]));
+            }
         }
 
         private void txtScheduleSearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -426,6 +417,7 @@ namespace ExcelLink.Forms
         }
 
         #endregion
+
         #region Schedule Export/Import
 
         private void ExportSchedulesToExcel()
@@ -437,10 +429,12 @@ namespace ExcelLink.Forms
                 return;
             }
 
-            SaveFileDialog saveDialog = new SaveFileDialog();
-            saveDialog.Filter = "Excel files|*.xlsx";
-            saveDialog.Title = "Save Revit Schedules to Excel";
-            saveDialog.FileName = $"{_doc.Title}_Schedules.xlsx";
+            SaveFileDialog saveDialog = new SaveFileDialog
+            {
+                Filter = "Excel files|*.xlsx",
+                Title = "Save Revit Schedules to Excel",
+                FileName = $"{_doc.Title}_Schedules.xlsx"
+            };
 
             if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
             string excelFile = saveDialog.FileName;
@@ -523,9 +517,11 @@ namespace ExcelLink.Forms
 
         private void ImportSchedulesFromExcel()
         {
-            OpenFileDialog openDialog = new OpenFileDialog();
-            openDialog.Filter = "Excel files|*.xlsx;*.xls";
-            openDialog.Title = "Select Excel File with Schedules to Import";
+            OpenFileDialog openDialog = new OpenFileDialog
+            {
+                Filter = "Excel files|*.xlsx;*.xls",
+                Title = "Select Excel File with Schedules to Import"
+            };
 
             if (openDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
             {
@@ -581,11 +577,9 @@ namespace ExcelLink.Forms
 
         #endregion
 
-        #region Category Export/Import
-
+        #region Category and Parameter Logic
         private void ExportToExcel()
         {
-            // Validate selections
             if (!SelectedCategoryNames.Any())
             {
                 frmInfoDialog infoDialog = new frmInfoDialog("Please select at least one category.");
@@ -600,115 +594,79 @@ namespace ExcelLink.Forms
                 return;
             }
 
-            // Prompt user to save Excel file
-            SaveFileDialog saveDialog = new SaveFileDialog();
-            saveDialog.Filter = "Excel files|*.xlsx";
-            saveDialog.Title = "Save Revit Parameters to Excel";
-
-            string defaultFileName = _doc.Title;
-            if (string.IsNullOrEmpty(defaultFileName))
+            SaveFileDialog saveDialog = new SaveFileDialog
             {
-                defaultFileName = "RevitParameterExport";
-            }
-            saveDialog.FileName = defaultFileName + ".xlsx";
+                Filter = "Excel files|*.xlsx",
+                Title = "Save Revit Parameters to Excel",
+                FileName = $"{_doc.Title}.xlsx"
+            };
 
-            if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
-            {
-                return;
-            }
+            if (saveDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
             string excelFile = saveDialog.FileName;
-
-            // Collect all UI data BEFORE entering the background thread
-            var selectedCategories = CategoryItems
-                .Where(item => item.IsSelected && !item.IsSelectAll)
-                .ToList();
-
+            var selectedCategories = CategoryItems.Where(item => item.IsSelected && !item.IsSelectAll).ToList();
             var selectedParameterNames = SelectedParameterNames.ToList();
             bool isEntireModel = IsEntireModelChecked;
             ElementId activeViewId = _doc.ActiveView?.Id;
 
-            // Show progress bar on the UI thread
             ShowProgressBar();
 
             Task.Run(() =>
             {
-                Excel.Application excel = null;
-                Excel.Workbook workbook = null;
-                Excel.Worksheet worksheet = null;
-                Excel.Worksheet colorLegendSheet = null;
                 bool exportSuccess = false;
-
                 try
                 {
-                    // Create Excel application and workbook
-                    excel = new Excel.Application();
-                    workbook = excel.Workbooks.Add();
+                    _exportedExcelApp = new Excel.Application();
+                    _exportedExcelWorkbook = _exportedExcelApp.Workbooks.Add();
 
-                    // Remove default sheets except the first one
-                    while (workbook.Worksheets.Count > 1)
+                    while (_exportedExcelWorkbook.Worksheets.Count > 1)
                     {
-                        ((Excel.Worksheet)workbook.Worksheets[workbook.Worksheets.Count]).Delete();
+                        ((Excel.Worksheet)_exportedExcelWorkbook.Worksheets[_exportedExcelWorkbook.Worksheets.Count]).Delete();
                     }
 
-                    // Store references
-                    _exportedExcelApp = excel;
-                    _exportedExcelWorkbook = workbook;
-
-                    // Create the Color Legend Sheet first
-                    colorLegendSheet = (Excel.Worksheet)workbook.Worksheets[1];
+                    Excel.Worksheet colorLegendSheet = (Excel.Worksheet)_exportedExcelWorkbook.Worksheets[1];
                     colorLegendSheet.Name = "Color Legend";
-
-                    // Create color legend
                     CreateParameterColorLegend(colorLegendSheet);
 
-                    // Process each category with progress updates
                     int sheetIndex = 1;
                     int totalCategories = selectedCategories.Count;
-                    int totalWork = totalCategories * 100; // Each category contributes 100 units
+                    int totalWork = totalCategories * 100;
                     int currentWork = 0;
 
                     foreach (var categoryItem in selectedCategories)
                     {
                         sheetIndex++;
-                        // Create or get worksheet
-                        if (workbook.Worksheets.Count < sheetIndex)
+                        Excel.Worksheet worksheet;
+                        if (_exportedExcelWorkbook.Worksheets.Count < sheetIndex)
                         {
-                            worksheet = (Excel.Worksheet)workbook.Worksheets.Add(After: workbook.Worksheets[workbook.Worksheets.Count]);
+                            worksheet = (Excel.Worksheet)_exportedExcelWorkbook.Worksheets.Add(After: _exportedExcelWorkbook.Worksheets[_exportedExcelWorkbook.Worksheets.Count]);
                         }
                         else
                         {
-                            worksheet = (Excel.Worksheet)workbook.Worksheets[sheetIndex];
+                            worksheet = (Excel.Worksheet)_exportedExcelWorkbook.Worksheets[sheetIndex];
                         }
 
-                        // Set sheet name (Excel limits sheet names to 31 characters)
-                        string sheetName = categoryItem.CategoryName.Length > 31 ?
-                            categoryItem.CategoryName.Substring(0, 31) : categoryItem.CategoryName;
+                        string sheetName = categoryItem.CategoryName.Length > 31 ? categoryItem.CategoryName.Substring(0, 31) : categoryItem.CategoryName;
                         worksheet.Name = sheetName;
 
-                        // Process elements for this category
-                        ProcessCategoryForExport(worksheet, categoryItem, selectedParameterNames,
-                            isEntireModel, activeViewId, (progress) =>
-                            {
-                                int categoryProgress = currentWork + progress;
-                                int overallProgress = (int)((double)categoryProgress / totalWork * 100);
-                                Dispatcher.Invoke(() => UpdateProgressBar(Math.Min(overallProgress, 95)));
-                            });
+                        ProcessCategoryForExport(worksheet, categoryItem, selectedParameterNames, isEntireModel, activeViewId, (progress) =>
+                        {
+                            int categoryProgress = currentWork + progress;
+                            int overallProgress = (int)((double)categoryProgress / totalWork * 100);
+                            Dispatcher.Invoke(() => UpdateProgressBar(Math.Min(overallProgress, 95)));
+                        });
 
                         currentWork += 100;
                     }
 
-                    // Save the workbook
-                    excel.DisplayAlerts = false;
-                    workbook.SaveAs(excelFile);
-                    excel.DisplayAlerts = true;
-
+                    _exportedExcelApp.DisplayAlerts = false;
+                    _exportedExcelWorkbook.SaveAs(excelFile);
+                    _exportedExcelApp.DisplayAlerts = true;
                     colorLegendSheet.Activate();
 
                     _postProgressAction = () => {
                         frmInfoDialog infoDialog = new frmInfoDialog("Sheet exported successfully");
                         infoDialog.ShowDialog();
-
                         if (_exportedExcelApp != null)
                         {
                             _exportedExcelApp.Visible = true;
@@ -716,40 +674,12 @@ namespace ExcelLink.Forms
                         HideProgressBar();
                     };
 
-                    // Show 100% progress
                     Dispatcher.Invoke(() => UpdateProgressBar(100));
                     exportSuccess = true;
                 }
-                catch (System.Runtime.InteropServices.COMException ex)
-                {
-                    if (ex.HResult == unchecked((int)0x800A03EC))
-                    {
-                        Dispatcher.Invoke(() =>
-                        {
-                            HideProgressBar();
-                            frmInfoDialog infoDialog = new frmInfoDialog("The Excel file is already open.\nPlease close it and try again.");
-                            infoDialog.ShowDialog();
-                        });
-                    }
-                    else
-                    {
-                        if (excel != null)
-                        {
-                            excel.DisplayAlerts = true;
-                        }
-                        Dispatcher.Invoke(() =>
-                        {
-                            HideProgressBar();
-                            TaskDialog.Show("Error", $"Failed to export parameters:\n{ex.Message}");
-                        });
-                    }
-                }
                 catch (Exception ex)
                 {
-                    if (excel != null)
-                    {
-                        excel.DisplayAlerts = true;
-                    }
+                    if (_exportedExcelApp != null) _exportedExcelApp.DisplayAlerts = true;
                     Dispatcher.Invoke(() =>
                     {
                         HideProgressBar();
@@ -758,13 +688,10 @@ namespace ExcelLink.Forms
                 }
                 finally
                 {
-                    if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
-                    if (colorLegendSheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(colorLegendSheet);
-
                     if (!exportSuccess)
                     {
-                        if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                        if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
+                        if (_exportedExcelWorkbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(_exportedExcelWorkbook);
+                        if (_exportedExcelApp != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(_exportedExcelApp);
                     }
                 }
             });
@@ -772,14 +699,13 @@ namespace ExcelLink.Forms
 
         private void ImportFromExcel()
         {
-            OpenFileDialog openDialog = new OpenFileDialog();
-            openDialog.Filter = "Excel files|*.xlsx;*.xls";
-            openDialog.Title = "Select Excel File to Import";
-
-            if (openDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+            OpenFileDialog openDialog = new OpenFileDialog
             {
-                return;
-            }
+                Filter = "Excel files|*.xlsx;*.xls",
+                Title = "Select Excel File to Import"
+            };
+
+            if (openDialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
             string excelFile = openDialog.FileName;
 
@@ -788,24 +714,14 @@ namespace ExcelLink.Forms
             _importExternalEvent.Raise();
         }
 
-        #endregion
-
-        #region Category Methods
-
         private void rbEntireModel_Checked(object sender, RoutedEventArgs e)
         {
-            if (IsLoaded)
-            {
-                LoadCategoriesBasedOnScope();
-            }
+            if (IsLoaded) LoadCategoriesBasedOnScope();
         }
 
         private void rbActiveView_Checked(object sender, RoutedEventArgs e)
         {
-            if (IsLoaded)
-            {
-                LoadCategoriesBasedOnScope();
-            }
+            if (IsLoaded) LoadCategoriesBasedOnScope();
         }
 
         private void LoadCategoriesBasedOnScope()
@@ -815,36 +731,20 @@ namespace ExcelLink.Forms
             SelectedParameterItems.Clear();
 
             List<Category> availableCategories = GetCategoriesWithElementsInScope();
-
             CategoryItems.Add(new ParaExportCategoryItem("Select All Categories", true));
-
             foreach (Category category in availableCategories.OrderBy(c => c.Name))
             {
                 CategoryItems.Add(new ParaExportCategoryItem(category));
             }
-
             lvCategories.ItemsSource = CategoryItems;
-
             txtCategorySearch.Text = "Search categories...";
         }
 
         private List<Category> GetCategoriesWithElementsInScope()
         {
-            FilteredElementCollector collector;
+            FilteredElementCollector collector = IsEntireModelChecked ? new FilteredElementCollector(_doc) : new FilteredElementCollector(_doc, _doc.ActiveView.Id);
 
-            if (IsEntireModelChecked)
-            {
-                collector = new FilteredElementCollector(_doc);
-            }
-            else
-            {
-                collector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
-            }
-
-            var elementInstances = collector
-                .WhereElementIsNotElementType()
-                .ToList();
-
+            var elementInstances = collector.WhereElementIsNotElementType().ToList();
             var categoriesWithElements = elementInstances
                 .Where(e => e.Category != null)
                 .Select(e => e.Category)
@@ -852,113 +752,62 @@ namespace ExcelLink.Forms
                 .Select(g => g.First())
                 .ToList();
 
-            HashSet<string> excludedCategoryNames = new HashSet<string>
-            {
-                "Survey Point", "Sun Path", "Project Information", "Project Base Point", "Primary Contours", "Material Assets",
-                "Legend Components", "Internal Origin", "Cameras", "HVAC Zones", "Pipe Segments", "Area Based Load Type",
-                "Circuit Naming Scheme", "<Sketch>", "Center Line", "Center line", "Lines", "Detail Items",
-                "Model Lines", "Detail Lines", "<Room Separation>", "<Area Boundary>", "<Space Separation>",
-                "Curtain Panel Tags", "Curtain System Tags", "Detail Item Tags", "Door Tags", "Floor Tags",
-                "Generic Annotations", "Keynote Tags", "Material Tags", "Multi-Category Tags", "Parking Tags",
-                "Plumbing Fixture Tags", "Property Line Segment Tags", "Property Tags", "Revision Clouds",
-                "Room Tags", "Space Tags", "Structural Annotations", "Wall Tags", "Window Tags"
-            };
+            HashSet<string> excludedCategoryNames = new HashSet<string> { "Survey Point", "Sun Path", "Project Information", "Project Base Point", "Primary Contours", "Material Assets", "Legend Components", "Internal Origin", "Cameras", "HVAC Zones", "Pipe Segments", "Area Based Load Type", "Circuit Naming Scheme", "<Sketch>", "Center Line", "Center line", "Lines", "Detail Items", "Model Lines", "Detail Lines", "<Room Separation>", "<Area Boundary>", "<Space Separation>", "Curtain Panel Tags", "Curtain System Tags", "Detail Item Tags", "Door Tags", "Floor Tags", "Generic Annotations", "Keynote Tags", "Material Tags", "Multi-Category Tags", "Parking Tags", "Plumbing Fixture Tags", "Property Line Segment Tags", "Property Tags", "Revision Clouds", "Room Tags", "Space Tags", "Structural Annotations", "Wall Tags", "Window Tags" };
 
             var modelCategories = categoriesWithElements
-                .Where(c => (c.CategoryType == CategoryType.Model || c.Name == "Rooms") &&
-                           !excludedCategoryNames.Contains(c.Name) &&
-                           !c.Name.ToLower().Contains("line") &&
-                           !c.Name.ToLower().Contains("sketch"))
+                .Where(c => (c.CategoryType == CategoryType.Model || c.Name == "Rooms") && !excludedCategoryNames.Contains(c.Name) && !c.Name.ToLower().Contains("line") && !c.Name.ToLower().Contains("sketch"))
                 .ToList();
 
-            // Additional check for Rooms category - ensure there are actual room elements
             var finalCategories = new List<Category>();
             foreach (var category in modelCategories)
             {
-                FilteredElementCollector catCollector;
-                if (IsEntireModelChecked)
-                {
-                    catCollector = new FilteredElementCollector(_doc);
-                }
-                else
-                {
-                    catCollector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
-                }
-
-                catCollector.OfCategoryId(category.Id);
-                catCollector.WhereElementIsNotElementType();
-
-                // Only add category if it has at least one element
-                if (catCollector.GetElementCount() > 0)
+                FilteredElementCollector catCollector = IsEntireModelChecked ? new FilteredElementCollector(_doc) : new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                catCollector.OfCategoryId(category.Id).WhereElementIsNotElementType();
+                if (catCollector.Any())
                 {
                     finalCategories.Add(category);
                 }
             }
-
             return finalCategories;
         }
+
         private void CategoryCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             var checkBox = sender as System.Windows.Controls.CheckBox;
-            if (checkBox == null) return;
-
-            var categoryItem = checkBox.DataContext as ParaExportCategoryItem;
-            if (categoryItem == null) return;
-
-            if (categoryItem.IsSelectAll)
+            if (checkBox?.DataContext is ParaExportCategoryItem categoryItem)
             {
-                // Handle "Select All" checkbox
-                bool isChecked = checkBox.IsChecked ?? false;
-                foreach (var item in CategoryItems)
+                if (categoryItem.IsSelectAll)
                 {
-                    if (!item.IsSelectAll)
+                    bool isChecked = checkBox.IsChecked ?? false;
+                    foreach (var item in CategoryItems.Where(i => !i.IsSelectAll))
                     {
                         item.IsSelected = isChecked;
                     }
                 }
+                UpdateAvailableParameters();
             }
-
-            UpdateAvailableParameters();
-
         }
 
         private void UpdateAvailableParameters()
         {
             AvailableParameterItems.Clear();
-
-            var selectedCategories = CategoryItems
-                .Where(item => item.IsSelected && !item.IsSelectAll)
-                .ToList();
-
+            var selectedCategories = CategoryItems.Where(item => item.IsSelected && !item.IsSelectAll).ToList();
             if (!selectedCategories.Any()) return;
 
-            // Get all unique parameters from selected categories
-            HashSet<string> parameterNames = new HashSet<string>();
-            Dictionary<string, Parameter> parameterMap = new Dictionary<string, Parameter>();
-            Dictionary<string, bool> isReadOnlyMap = new Dictionary<string, bool>();
-            Dictionary<string, bool> isTypeParamMap = new Dictionary<string, bool>();
+            var parameterNames = new HashSet<string>();
+            var parameterMap = new Dictionary<string, Parameter>();
+            var isReadOnlyMap = new Dictionary<string, bool>();
+            var isTypeParamMap = new Dictionary<string, bool>();
 
             foreach (var categoryItem in selectedCategories)
             {
-                FilteredElementCollector collector;
-                if (IsEntireModelChecked)
-                {
-                    collector = new FilteredElementCollector(_doc);
-                }
-                else
-                {
-                    collector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
-                }
-
-                collector.OfCategoryId(categoryItem.Category.Id);
-                collector.WhereElementIsNotElementType();
-
+                FilteredElementCollector collector = IsEntireModelChecked ? new FilteredElementCollector(_doc) : new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                collector.OfCategoryId(categoryItem.Category.Id).WhereElementIsNotElementType();
                 var elements = collector.ToElements();
                 if (!elements.Any()) continue;
 
-                foreach (Element element in elements.Take(10)) // Sample first 10 elements
+                foreach (Element element in elements.Take(10))
                 {
-                    // Get instance parameters
                     foreach (Parameter param in element.Parameters)
                     {
                         if (param.Definition != null)
@@ -974,7 +823,6 @@ namespace ExcelLink.Forms
                         }
                     }
 
-                    // Get type parameters
                     Element elementType = _doc.GetElement(element.GetTypeId());
                     if (elementType != null)
                     {
@@ -993,65 +841,34 @@ namespace ExcelLink.Forms
                             }
                         }
                     }
-
-                    // Add specific built-in parameters
                     AddSpecificBuiltInParameters(element, parameterNames, parameterMap);
                 }
             }
 
-            // Exclude "Type Name" and "Family Name" parameters
-            parameterNames.Remove("Type Name");
-            parameterNames.Remove("Family Name");
-            parameterNames.Remove("Category");
-            parameterNames.Remove("Type Id");
+            parameterNames.ExceptWith(new[] { "Type Name", "Family Name", "Category", "Type Id" });
 
-            // Create parameter items
             foreach (string paramName in parameterNames.OrderBy(p => p))
             {
                 if (parameterMap.ContainsKey(paramName))
                 {
-                    bool isReadOnly = isReadOnlyMap.ContainsKey(paramName) && isReadOnlyMap[paramName];
-                    bool isTypeParam = isTypeParamMap.ContainsKey(paramName) && isTypeParamMap[paramName];
+                    // FIXED: Replaced GetValueOrDefault with ContainsKey check
+                    bool isReadOnly = isReadOnlyMap.ContainsKey(paramName) ? isReadOnlyMap[paramName] : false;
+                    bool isTypeParam = isTypeParamMap.ContainsKey(paramName) ? isTypeParamMap[paramName] : false;
 
-                    // Make the "Type", "Family and Type", and "Family" parameter read-only
-                    if (paramName == "Type" || paramName == "Family and Type" || paramName == "Family")
-                    {
-                        isReadOnly = true;
-                    }
-
+                    if (paramName == "Type" || paramName == "Family and Type" || paramName == "Family") isReadOnly = true;
                     AvailableParameterItems.Add(new ParaExportParameterItem(parameterMap[paramName], isReadOnly, isTypeParam));
                 }
             }
-
-            // Reset the search text
             txtParameterSearch.Text = "Search parameters...";
         }
 
         private void AddSpecificBuiltInParameters(Element element, HashSet<string> parameterNames, Dictionary<string, Parameter> parameterMap)
         {
-            var builtInParamsToCheck = new Dictionary<string, BuiltInParameter>
-            {
-                { "Family", BuiltInParameter.ELEM_FAMILY_PARAM },
-                { "Family and Type", BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM },
-                { "Type", BuiltInParameter.ELEM_TYPE_PARAM },
-                { "Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS },
-                { "Type Comments", BuiltInParameter.ALL_MODEL_TYPE_COMMENTS },
-                { "Mark", BuiltInParameter.ALL_MODEL_MARK },
-                { "Type Mark", BuiltInParameter.ALL_MODEL_TYPE_MARK },
-                { "Description", BuiltInParameter.ALL_MODEL_DESCRIPTION },
-                { "Manufacturer", BuiltInParameter.ALL_MODEL_MANUFACTURER },
-                { "Model", BuiltInParameter.ALL_MODEL_MODEL },
-                { "URL", BuiltInParameter.ALL_MODEL_URL },
-                { "Cost", BuiltInParameter.ALL_MODEL_COST },
-                { "Assembly Code", BuiltInParameter.UNIFORMAT_CODE },
-                { "Assembly Description", BuiltInParameter.UNIFORMAT_DESCRIPTION },
-                { "Keynote", BuiltInParameter.KEYNOTE_PARAM },
-            };
+            var builtInParamsToCheck = new Dictionary<string, BuiltInParameter> { { "Family", BuiltInParameter.ELEM_FAMILY_PARAM }, { "Family and Type", BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM }, { "Type", BuiltInParameter.ELEM_TYPE_PARAM }, { "Comments", BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS }, { "Type Comments", BuiltInParameter.ALL_MODEL_TYPE_COMMENTS }, { "Mark", BuiltInParameter.ALL_MODEL_MARK }, { "Type Mark", BuiltInParameter.ALL_MODEL_TYPE_MARK }, { "Description", BuiltInParameter.ALL_MODEL_DESCRIPTION }, { "Manufacturer", BuiltInParameter.ALL_MODEL_MANUFACTURER }, { "Model", BuiltInParameter.ALL_MODEL_MODEL }, { "URL", BuiltInParameter.ALL_MODEL_URL }, { "Cost", BuiltInParameter.ALL_MODEL_COST }, { "Assembly Code", BuiltInParameter.UNIFORMAT_CODE }, { "Assembly Description", BuiltInParameter.UNIFORMAT_DESCRIPTION }, { "Keynote", BuiltInParameter.KEYNOTE_PARAM }, { "Area", BuiltInParameter.HOST_AREA_COMPUTED }, { "Volume", BuiltInParameter.HOST_VOLUME_COMPUTED }, { "Perimeter", BuiltInParameter.HOST_PERIMETER_COMPUTED }, { "Level", BuiltInParameter.LEVEL_PARAM } };
 
             if (element.Category != null)
             {
                 string categoryName = element.Category.Name;
-
                 if (categoryName.Contains("Floor"))
                 {
                     builtInParamsToCheck["Default Thickness"] = BuiltInParameter.FLOOR_ATTR_DEFAULT_THICKNESS_PARAM;
@@ -1072,11 +889,6 @@ namespace ExcelLink.Forms
                     builtInParamsToCheck["Head Height"] = BuiltInParameter.INSTANCE_HEAD_HEIGHT_PARAM;
                     builtInParamsToCheck["Sill Height"] = BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM;
                 }
-
-                builtInParamsToCheck["Area"] = BuiltInParameter.HOST_AREA_COMPUTED;
-                builtInParamsToCheck["Volume"] = BuiltInParameter.HOST_VOLUME_COMPUTED;
-                builtInParamsToCheck["Perimeter"] = BuiltInParameter.HOST_PERIMETER_COMPUTED;
-                builtInParamsToCheck["Level"] = BuiltInParameter.LEVEL_PARAM;
             }
 
             foreach (var kvp in builtInParamsToCheck)
@@ -1090,13 +902,9 @@ namespace ExcelLink.Forms
                         if (typeId != ElementId.InvalidElementId)
                         {
                             Element elementType = _doc.GetElement(typeId);
-                            if (elementType != null)
-                            {
-                                param = elementType.get_Parameter(kvp.Value);
-                            }
+                            if (elementType != null) param = elementType.get_Parameter(kvp.Value);
                         }
                     }
-
                     if (param != null && param.Definition != null && !parameterNames.Contains(kvp.Key))
                     {
                         parameterNames.Add(kvp.Key);
@@ -1107,18 +915,13 @@ namespace ExcelLink.Forms
             }
         }
 
-        #endregion
-
-        #region Category Search Methods
-
         private void txtCategorySearch_TextChanged(object sender, TextChangedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Controls.TextBox;
             if (textBox != null && textBox.IsFocused)
             {
                 string searchText = textBox.Text.ToLower();
                 if (searchText == "search categories...") return;
-
                 var filteredItems = CategoryItems.Where(c => c.IsSelectAll || c.CategoryName.ToLower().Contains(searchText));
                 lvCategories.ItemsSource = new ObservableCollection<ParaExportCategoryItem>(filteredItems);
             }
@@ -1126,26 +929,19 @@ namespace ExcelLink.Forms
 
         private void txtCategorySearch_GotFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
-            if (textBox != null && textBox.Text == "Search categories...")
-            {
-                textBox.Text = "";
-            }
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && textBox.Text == "Search categories...") textBox.Text = "";
         }
 
         private void txtCategorySearch_LostFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Controls.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
-                txtCategorySearch.Text = "Search categories...";
+                textBox.Text = "Search categories...";
                 lvCategories.ItemsSource = CategoryItems;
             }
         }
-
-        #endregion
-
-        #region Parameter Search Methods
 
         private void ApplyParameterFilter()
         {
@@ -1163,25 +959,18 @@ namespace ExcelLink.Forms
 
         private void txtParameterSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
-            if (textBox != null && textBox.IsFocused)
-            {
-                ApplyParameterFilter();
-            }
+            if ((sender as System.Windows.Controls.TextBox)?.IsFocused == true) ApplyParameterFilter();
         }
 
         private void txtParameterSearch_GotFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
-            if (textBox != null && textBox.Text == "Search parameters...")
-            {
-                textBox.Text = "";
-            }
+            var textBox = sender as System.Windows.Controls.TextBox;
+            if (textBox != null && textBox.Text == "Search parameters...") textBox.Text = "";
         }
 
         private void txtParameterSearch_LostFocus(object sender, RoutedEventArgs e)
         {
-            System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
+            var textBox = sender as System.Windows.Controls.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
                 textBox.Text = "Search parameters...";
@@ -1189,15 +978,11 @@ namespace ExcelLink.Forms
             }
         }
 
-        #endregion
-
-        #region Parameter Movement Methods
-
         private void lvAvailableParameters_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (lvAvailableParameters.SelectedItem is ParaExportParameterItem item)
             {
-                MoveParameters(new List<ParaExportParameterItem> { item }, AvailableParameterItems, SelectedParameterItems);
+                MoveParameters(new[] { item }, AvailableParameterItems, SelectedParameterItems);
             }
         }
 
@@ -1205,7 +990,7 @@ namespace ExcelLink.Forms
         {
             if (lvSelectedParameters.SelectedItem is ParaExportParameterItem item)
             {
-                MoveParameters(new List<ParaExportParameterItem> { item }, SelectedParameterItems, AvailableParameterItems);
+                MoveParameters(new[] { item }, SelectedParameterItems, AvailableParameterItems);
             }
         }
 
@@ -1214,24 +999,14 @@ namespace ExcelLink.Forms
             var movedItems = itemsToMove.ToList();
             foreach (var item in movedItems)
             {
-                if (source.Contains(item)) // Ensure the item exists before removal
-                {
-                    source.Remove(item);
-                    destination.Add(item);
-                }
+                if (source.Remove(item)) destination.Add(item);
             }
-
             if (destination == AvailableParameterItems)
             {
                 var sorted = destination.OrderBy(p => p.ParameterName).ToList();
                 destination.Clear();
-                foreach (var item in sorted)
-                {
-                    destination.Add(item);
-                }
+                foreach (var item in sorted) destination.Add(item);
             }
-
-            // Always re-apply the filter after any move operation
             ApplyParameterFilter();
         }
 
@@ -1250,31 +1025,23 @@ namespace ExcelLink.Forms
         private void btnMoveUp_Click(object sender, RoutedEventArgs e)
         {
             var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
-            if (selectedItems.Count == 0) return;
-
+            if (!selectedItems.Any()) return;
             foreach (var item in selectedItems)
             {
                 int index = SelectedParameterItems.IndexOf(item);
-                if (index > 0)
-                {
-                    SelectedParameterItems.Move(index, index - 1);
-                }
+                if (index > 0) SelectedParameterItems.Move(index, index - 1);
             }
         }
 
         private void btnMoveDown_Click(object sender, RoutedEventArgs e)
         {
             var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
-            if (selectedItems.Count == 0) return;
-
+            if (!selectedItems.Any()) return;
             for (int i = selectedItems.Count - 1; i >= 0; i--)
             {
                 var item = selectedItems[i];
                 int index = SelectedParameterItems.IndexOf(item);
-                if (index < SelectedParameterItems.Count - 1)
-                {
-                    SelectedParameterItems.Move(index, index + 1);
-                }
+                if (index < SelectedParameterItems.Count - 1) SelectedParameterItems.Move(index, index + 1);
             }
         }
 
@@ -1282,11 +1049,7 @@ namespace ExcelLink.Forms
         {
             string searchText = txtParameterSearch.Text;
             bool isSearching = !string.IsNullOrWhiteSpace(searchText) && searchText != "Search parameters...";
-
-            var itemsToMove = isSearching
-                ? lvAvailableParameters.Items.Cast<ParaExportParameterItem>().ToList()
-                : AvailableParameterItems.ToList();
-
+            var itemsToMove = isSearching ? lvAvailableParameters.Items.Cast<ParaExportParameterItem>().ToList() : AvailableParameterItems.ToList();
             MoveParameters(itemsToMove, AvailableParameterItems, SelectedParameterItems);
         }
 
@@ -1296,12 +1059,8 @@ namespace ExcelLink.Forms
             MoveParameters(allSelectedItems, SelectedParameterItems, AvailableParameterItems);
         }
 
-        #endregion
-        #region Excel Export Helper Methods
-
         private void ProcessCategoryForExport(Excel.Worksheet worksheet, ParaExportCategoryItem categoryItem, List<string> selectedParameters, bool isEntireModel, ElementId activeViewId, Action<int> progressCallback)
         {
-            // Write headers with multi-line text
             Excel.Range elementIdHeader = (Excel.Range)worksheet.Cells[1, 1];
             elementIdHeader.Value2 = "Element ID";
             elementIdHeader.ColumnWidth = 12;
@@ -1312,33 +1071,15 @@ namespace ExcelLink.Forms
                 string paramType = "N/A";
                 string paramStorageType = "N/A";
 
-                // Get parameter info
-                FilteredElementCollector tempCollector;
-                if (isEntireModel)
-                {
-                    tempCollector = new FilteredElementCollector(_doc);
-                }
-                else
-                {
-                    tempCollector = new FilteredElementCollector(_doc, activeViewId);
-                }
-
-                tempCollector.OfCategoryId(categoryItem.Category.Id);
-                tempCollector.WhereElementIsNotElementType();
+                FilteredElementCollector tempCollector = isEntireModel ? new FilteredElementCollector(_doc) : new FilteredElementCollector(_doc, activeViewId);
+                tempCollector.OfCategoryId(categoryItem.Category.Id).WhereElementIsNotElementType();
                 Element tempElement = tempCollector.FirstElement();
 
                 if (tempElement != null)
                 {
-                    Parameter param = null;
+                    Parameter param = tempElement.LookupParameter(paramName);
                     bool isTypeParam = false;
-
-                    // Check for parameter (instance and type)
-                    param = tempElement.LookupParameter(paramName);
-                    if (param != null)
-                    {
-                        paramType = "Instance Parameter";
-                    }
-                    else
+                    if (param == null)
                     {
                         Element typeElem = _doc.GetElement(tempElement.GetTypeId());
                         if (typeElem != null)
@@ -1351,21 +1092,19 @@ namespace ExcelLink.Forms
                             }
                         }
                     }
+                    else
+                    {
+                        paramType = "Instance Parameter";
+                    }
 
-                    // If still not found, check for built-in parameters
                     if (param == null)
                     {
                         BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
                         if (bip != BuiltInParameter.INVALID)
                         {
                             param = tempElement.get_Parameter(bip);
-                            if (param != null)
+                            if (param == null)
                             {
-                                paramType = "Instance Parameter";
-                            }
-                            else
-                            {
-                                // Check if it's a built-in type parameter
                                 Element typeElem = _doc.GetElement(tempElement.GetTypeId());
                                 if (typeElem != null)
                                 {
@@ -1377,24 +1116,21 @@ namespace ExcelLink.Forms
                                     }
                                 }
                             }
+                            else
+                            {
+                                paramType = "Instance Parameter";
+                            }
                         }
                     }
-
-                    if (param != null)
-                    {
-                        paramStorageType = Utils.GetParameterStorageTypeString(param.StorageType);
-                    }
+                    if (param != null) paramStorageType = Utils.GetParameterStorageTypeString(param.StorageType);
                 }
 
                 string headerText = $"{paramName}{Environment.NewLine}({paramType}){Environment.NewLine}Type: {paramStorageType}";
                 Excel.Range headerCell = (Excel.Range)worksheet.Cells[1, i + 2];
                 headerCell.Value2 = headerText;
-
-                int columnWidth = Math.Max(15, Math.Min(30, paramName.Length + 5));
-                headerCell.ColumnWidth = columnWidth;
+                headerCell.ColumnWidth = Math.Max(15, Math.Min(30, paramName.Length + 5));
             }
 
-            // Format headers
             Excel.Range headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, selectedParameters.Count + 1]];
             headerRange.Font.Bold = true;
             headerRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
@@ -1403,23 +1139,12 @@ namespace ExcelLink.Forms
             headerRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
             headerRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
             headerRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
-            headerRange.AutoFilter(1, Type.Missing, Excel.XlAutoFilterOperator.xlAnd, Type.Missing, true);
+            headerRange.AutoFilter(1, Type.Missing, Excel.XlAutoFilterOperator.xlAnd, true);
             ((Excel.Range)worksheet.Rows[1]).RowHeight = 45;
 
-            // Get elements
-            FilteredElementCollector dataCollector;
-            if (isEntireModel)
-            {
-                dataCollector = new FilteredElementCollector(_doc);
-            }
-            else
-            {
-                dataCollector = new FilteredElementCollector(_doc, activeViewId);
-            }
-            dataCollector.OfCategoryId(categoryItem.Category.Id);
-            dataCollector.WhereElementIsNotElementType();
+            FilteredElementCollector dataCollector = isEntireModel ? new FilteredElementCollector(_doc) : new FilteredElementCollector(_doc, activeViewId);
+            dataCollector.OfCategoryId(categoryItem.Category.Id).WhereElementIsNotElementType();
             List<Element> elements = dataCollector.ToList();
-
             int totalElements = elements.Count;
             int processedElements = 0;
             int row = 2;
@@ -1436,11 +1161,9 @@ namespace ExcelLink.Forms
                 {
                     string paramName = selectedParameters[col];
                     Excel.Range dataCell = (Excel.Range)worksheet.Cells[row, col + 2];
-
-                    Parameter param = element.LookupParameter(paramName);
                     string value = string.Empty;
                     bool isTypeParam = false;
-
+                    Parameter param = element.LookupParameter(paramName);
                     if (param != null)
                     {
                         value = Utils.GetParameterValue(element, paramName);
@@ -1488,11 +1211,7 @@ namespace ExcelLink.Forms
                     if (param != null)
                     {
                         dataCell.Value2 = value;
-                        if (paramName == "Family" || paramName == "Family and Type" || paramName == "Type")
-                        {
-                            dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
-                        }
-                        else if (param.IsReadOnly)
+                        if (paramName == "Family" || paramName == "Family and Type" || paramName == "Type" || param.IsReadOnly)
                         {
                             dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
                         }
@@ -1505,98 +1224,68 @@ namespace ExcelLink.Forms
                     {
                         dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
                     }
-
                     dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                     dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
                 }
                 row++;
                 processedElements++;
-
-                // Update progress
                 if (processedElements % 10 == 0 || processedElements == totalElements)
                 {
-                    int percentage = (int)((double)processedElements / totalElements * 100);
-                    progressCallback(percentage);
+                    progressCallback((int)((double)processedElements / totalElements * 100));
                 }
             }
-
             worksheet.Columns.AutoFit();
         }
 
         private void CreateParameterColorLegend(Excel.Worksheet colorLegendSheet)
         {
-            // Merge and center title
             Excel.Range titleRange = colorLegendSheet.Range[colorLegendSheet.Cells[1, 2], colorLegendSheet.Cells[1, 4]];
             titleRange.Merge();
             titleRange.Value2 = "Color Legend";
             titleRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
             titleRange.Font.Bold = true;
             titleRange.Font.Size = 14;
+            titleRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+            titleRange.Borders.Weight = Excel.XlBorderWeight.xlThick;
 
-            // Add thick border around title
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeLeft].LineStyle = Excel.XlLineStyle.xlContinuous;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeTop].LineStyle = Excel.XlLineStyle.xlContinuous;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeBottom].LineStyle = Excel.XlLineStyle.xlContinuous;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeRight].LineStyle = Excel.XlLineStyle.xlContinuous;
-            titleRange.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
-
-            // Write legend headers
             ((Excel.Range)colorLegendSheet.Cells[3, 2]).Value2 = "Color";
             ((Excel.Range)colorLegendSheet.Cells[3, 3]).Value2 = "Description";
             ((Excel.Range)colorLegendSheet.Cells[3, 4]).Value2 = "Notes";
 
-            // Format headers
             Excel.Range legendHeaderRange = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[3, 4]];
             legendHeaderRange.Font.Bold = true;
             legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
             legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-            // Write legend content
-            Excel.Range greyCell = (Excel.Range)colorLegendSheet.Cells[4, 2];
-            greyCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+            ((Excel.Range)colorLegendSheet.Cells[4, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
             ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Parameter does not exist for this element";
             ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Do not fill or edit cell";
 
-            Excel.Range lightYellowCell = (Excel.Range)colorLegendSheet.Cells[5, 2];
-            lightYellowCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+            ((Excel.Range)colorLegendSheet.Cells[5, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
             ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Type value";
             ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Type parameters with the same ID should be filled the same";
 
-            Excel.Range redCell = (Excel.Range)colorLegendSheet.Cells[6, 2];
-            redCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+            ((Excel.Range)colorLegendSheet.Cells[6, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
             ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Read-only value";
             ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Uneditable cell";
 
-            // Apply borders to all data cells
             Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[6, 4]];
             dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
             dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-            // Apply thick outside border to the entire table
             Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 4]];
-            entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].LineStyle = Excel.XlLineStyle.xlContinuous;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
-            entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].LineStyle = Excel.XlLineStyle.xlContinuous;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
-            entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].LineStyle = Excel.XlLineStyle.xlContinuous;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
-            entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].LineStyle = Excel.XlLineStyle.xlContinuous;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
 
-            // Set column widths
             ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
             ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 40;
             ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
-
-            // Center align the color column
-            Excel.Range colorColumn = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 2]];
-            colorColumn.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
+            colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[6, 2]].HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
         }
-
         #endregion
+
     }
 
     #region Data Classes
@@ -1608,78 +1297,24 @@ namespace ExcelLink.Forms
         private string _categoryName;
         private bool _isSelectAll;
 
-        public Category Category
-        {
-            get { return _category; }
-            set
-            {
-                _category = value;
-                OnPropertyChanged(nameof(Category));
-            }
-        }
-
-        public string CategoryName
-        {
-            get { return _categoryName; }
-            set
-            {
-                _categoryName = value;
-                OnPropertyChanged(nameof(CategoryName));
-            }
-        }
-
-        public bool IsSelected
-        {
-            get { return _isSelected; }
-            set
-            {
-                _isSelected = value;
-                OnPropertyChanged(nameof(IsSelected));
-            }
-        }
-
-        public bool IsSelectAll
-        {
-            get { return _isSelectAll; }
-            set
-            {
-                _isSelectAll = value;
-                OnPropertyChanged(nameof(IsSelectAll));
-                OnPropertyChanged(nameof(FontWeight));
-                OnPropertyChanged(nameof(TextColor));
-            }
-        }
-
-        public string FontWeight
-        {
-            get { return IsSelectAll ? "Bold" : "Normal"; }
-        }
-
-        public string TextColor
-        {
-            get { return IsSelectAll ? "#000000" : "#000000"; }
-        }
+        public Category Category { get => _category; set { _category = value; OnPropertyChanged(nameof(Category)); } }
+        public string CategoryName { get => _categoryName; set { _categoryName = value; OnPropertyChanged(nameof(CategoryName)); } }
+        public bool IsSelected { get => _isSelected; set { _isSelected = value; OnPropertyChanged(nameof(IsSelected)); } }
+        public bool IsSelectAll { get => _isSelectAll; set { _isSelectAll = value; OnPropertyChanged(nameof(IsSelectAll)); OnPropertyChanged(nameof(FontWeight)); OnPropertyChanged(nameof(TextColor)); } }
+        public string FontWeight => IsSelectAll ? "Bold" : "Normal";
+        public string TextColor => IsSelectAll ? "#000000" : "#000000";
 
         public event PropertyChangedEventHandler PropertyChanged;
-
-        protected virtual void OnPropertyChanged(string propertyName)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+        protected virtual void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         public ParaExportCategoryItem(Category category)
         {
             Category = category;
             CategoryName = category.Name;
-            IsSelected = false;
-            IsSelectAll = false;
         }
-
         public ParaExportCategoryItem(string displayName, bool isSelectAll = false)
         {
-            Category = null;
             CategoryName = displayName;
-            IsSelected = false;
             IsSelectAll = isSelectAll;
         }
     }
@@ -1687,108 +1322,26 @@ namespace ExcelLink.Forms
     public class ParaExportParameterItem : INotifyPropertyChanged
     {
         private Parameter _parameter;
-        private bool _isSelected;
         private string _parameterName;
-        private bool _isSelectAll;
         private SolidColorBrush _parameterColor;
 
-        public Parameter Parameter
-        {
-            get { return _parameter; }
-            set
-            {
-                _parameter = value;
-                OnPropertyChanged(nameof(Parameter));
-            }
-        }
-
-        public string ParameterName
-        {
-            get { return _parameterName; }
-            set
-            {
-                _parameterName = value;
-                OnPropertyChanged(nameof(ParameterName));
-            }
-        }
-
-        public bool IsSelected
-        {
-            get { return _isSelected; }
-            set
-            {
-                _isSelected = value;
-                OnPropertyChanged(nameof(IsSelected));
-            }
-        }
-
-        public bool IsSelectAll
-        {
-            get { return _isSelectAll; }
-            set
-            {
-                _isSelectAll = value;
-                OnPropertyChanged(nameof(IsSelectAll));
-                OnPropertyChanged(nameof(FontWeight));
-                OnPropertyChanged(nameof(TextColor));
-            }
-        }
-
-        public SolidColorBrush ParameterColor
-        {
-            get { return _parameterColor; }
-            set
-            {
-                _parameterColor = value;
-                OnPropertyChanged(nameof(ParameterColor));
-            }
-        }
-
-        public string FontWeight
-        {
-            get { return IsSelectAll ? "Bold" : "Normal"; }
-        }
-
-        public string TextColor
-        {
-            get { return IsSelectAll ? "#000000" : "#000000"; }
-        }
+        public Parameter Parameter { get => _parameter; set { _parameter = value; OnPropertyChanged(nameof(Parameter)); } }
+        public string ParameterName { get => _parameterName; set { _parameterName = value; OnPropertyChanged(nameof(ParameterName)); } }
+        public SolidColorBrush ParameterColor { get => _parameterColor; set { _parameterColor = value; OnPropertyChanged(nameof(ParameterColor)); } }
 
         public event PropertyChangedEventHandler PropertyChanged;
-
-        protected virtual void OnPropertyChanged(string propertyName)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+        protected virtual void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         public ParaExportParameterItem(Parameter parameter, bool isReadOnly, bool isTypeParam)
         {
             Parameter = parameter;
             ParameterName = parameter.Definition.Name;
-            IsSelected = false;
-            IsSelectAll = false;
-
             if (isReadOnly)
-            {
                 ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FF4747"));
-            }
             else if (isTypeParam)
-            {
                 ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FFE699"));
-            }
             else
-            {
                 ParameterColor = new SolidColorBrush(Colors.White);
-            }
-        }
-
-        public ParaExportParameterItem(string displayName, bool isSelectAll = false)
-        {
-            Parameter = null;
-            ParameterName = displayName;
-            IsSelected = false;
-            IsSelectAll = isSelectAll;
-            ParameterColor = new SolidColorBrush(Colors.White);
         }
     }
 
