@@ -692,7 +692,7 @@ namespace ExcelLink.Forms
                     colorLegendSheet.Name = "Color Legend";
 
                     // Create color legend
-                    CreateParameterColorLegendThread(colorLegendSheet);
+                    CreateParameterColorLegend(colorLegendSheet);
 
                     // Process each category with progress updates
                     int sheetIndex = 1;
@@ -719,7 +719,7 @@ namespace ExcelLink.Forms
                         worksheet.Name = sheetName;
 
                         // Process elements for this category
-                        ProcessCategoryForExportThread(worksheet, categoryItem, selectedParameterNames,
+                        ProcessCategoryForExport(worksheet, categoryItem, selectedParameterNames,
                             isEntireModel, activeViewId, (progress) =>
                             {
                                 int categoryProgress = currentWork + progress;
@@ -800,241 +800,6 @@ namespace ExcelLink.Forms
                     }
                 }
             });
-        }
-
-        // Thread-safe version of ProcessCategoryForExport
-        private void ProcessCategoryForExportThread(Excel.Worksheet worksheet, ParaExportCategoryItem categoryItem,
-            List<string> selectedParameters, bool isEntireModel, ElementId activeViewId, Action<int> progressCallback)
-        {
-            // Write headers with multi-line text
-            Excel.Range elementIdHeader = (Excel.Range)worksheet.Cells[1, 1];
-            elementIdHeader.Value2 = "Element ID";
-            elementIdHeader.ColumnWidth = 12;
-
-            for (int i = 0; i < selectedParameters.Count; i++)
-            {
-                string paramName = selectedParameters[i];
-                string paramType = "N/A";
-                string paramStorageType = "N/A";
-
-                // Get parameter info
-                FilteredElementCollector tempCollector;
-                if (isEntireModel)
-                {
-                    tempCollector = new FilteredElementCollector(_doc);
-                }
-                else
-                {
-                    tempCollector = new FilteredElementCollector(_doc, activeViewId);
-                }
-
-                tempCollector.OfCategoryId(categoryItem.Category.Id);
-                tempCollector.WhereElementIsNotElementType();
-                Element tempElement = tempCollector.FirstElement();
-
-                if (tempElement != null)
-                {
-                    Parameter param = null;
-                    bool isTypeParam = false;
-
-                    // Check for parameter (instance and type)
-                    param = tempElement.LookupParameter(paramName);
-                    if (param != null)
-                    {
-                        paramType = "Instance Parameter";
-                    }
-                    else
-                    {
-                        Element typeElem = _doc.GetElement(tempElement.GetTypeId());
-                        if (typeElem != null)
-                        {
-                            param = typeElem.LookupParameter(paramName);
-                            if (param != null)
-                            {
-                                paramType = "Type Parameter";
-                                isTypeParam = true;
-                            }
-                        }
-                    }
-
-                    // If still not found, check for built-in parameters
-                    if (param == null)
-                    {
-                        BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
-                        if (bip != BuiltInParameter.INVALID)
-                        {
-                            param = tempElement.get_Parameter(bip);
-                            if (param != null)
-                            {
-                                paramType = "Instance Parameter";
-                            }
-                            else
-                            {
-                                // Check if it's a built-in type parameter
-                                Element typeElem = _doc.GetElement(tempElement.GetTypeId());
-                                if (typeElem != null)
-                                {
-                                    param = typeElem.get_Parameter(bip);
-                                    if (param != null)
-                                    {
-                                        paramType = "Type Parameter";
-                                        isTypeParam = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (param != null)
-                    {
-                        paramStorageType = Utils.GetParameterStorageTypeString(param.StorageType);
-                    }
-                }
-
-                string headerText = $"{paramName}{Environment.NewLine}({paramType}){Environment.NewLine}Type: {paramStorageType}";
-                Excel.Range headerCell = (Excel.Range)worksheet.Cells[1, i + 2];
-                headerCell.Value2 = headerText;
-
-                int columnWidth = Math.Max(15, Math.Min(30, paramName.Length + 5));
-                headerCell.ColumnWidth = columnWidth;
-            }
-
-            // Format headers
-            Excel.Range headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, selectedParameters.Count + 1]];
-            headerRange.Font.Bold = true;
-            headerRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
-            headerRange.WrapText = true;
-            headerRange.VerticalAlignment = Excel.XlVAlign.xlVAlignTop;
-            headerRange.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
-            headerRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
-            headerRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
-            headerRange.AutoFilter(1, Type.Missing, Excel.XlAutoFilterOperator.xlAnd, Type.Missing, true);
-            ((Excel.Range)worksheet.Rows[1]).RowHeight = 45;
-
-            // Get elements
-            FilteredElementCollector dataCollector;
-            if (isEntireModel)
-            {
-                dataCollector = new FilteredElementCollector(_doc);
-            }
-            else
-            {
-                dataCollector = new FilteredElementCollector(_doc, activeViewId);
-            }
-            dataCollector.OfCategoryId(categoryItem.Category.Id);
-            dataCollector.WhereElementIsNotElementType();
-            List<Element> elements = dataCollector.ToList();
-
-            int totalElements = elements.Count;
-            int processedElements = 0;
-            int row = 2;
-
-            foreach (Element element in elements)
-            {
-                Excel.Range idCell = (Excel.Range)worksheet.Cells[row, 1];
-                idCell.Value2 = element.Id.IntegerValue.ToString();
-                idCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
-                idCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
-                idCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
-
-                for (int col = 0; col < selectedParameters.Count; col++)
-                {
-                    string paramName = selectedParameters[col];
-                    Excel.Range dataCell = (Excel.Range)worksheet.Cells[row, col + 2];
-
-                    Parameter param = element.LookupParameter(paramName);
-                    string value = string.Empty;
-                    bool isTypeParam = false;
-
-                    if (param != null)
-                    {
-                        value = Utils.GetParameterValue(element, paramName);
-                    }
-                    else
-                    {
-                        Element typeElem = _doc.GetElement(element.GetTypeId());
-                        if (typeElem != null)
-                        {
-                            param = typeElem.LookupParameter(paramName);
-                            if (param != null)
-                            {
-                                value = Utils.GetParameterValue(typeElem, paramName);
-                                isTypeParam = true;
-                            }
-                        }
-                    }
-
-                    if (param == null)
-                    {
-                        BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
-                        if (bip != BuiltInParameter.INVALID)
-                        {
-                            param = element.get_Parameter(bip);
-                            if (param != null)
-                            {
-                                value = Utils.GetParameterValue(element, paramName);
-                            }
-                            else
-                            {
-                                Element typeElem = _doc.GetElement(element.GetTypeId());
-                                if (typeElem != null)
-                                {
-                                    param = typeElem.get_Parameter(bip);
-                                    if (param != null)
-                                    {
-                                        value = Utils.GetParameterValue(typeElem, paramName);
-                                        isTypeParam = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (param != null)
-                    {
-                        dataCell.Value2 = value;
-                        if (paramName == "Family" || paramName == "Family and Type" || paramName == "Type")
-                        {
-                            dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
-                        }
-                        else if (param.IsReadOnly)
-                        {
-                            dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
-                        }
-                        else if (isTypeParam)
-                        {
-                            dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
-                        }
-                    }
-                    else
-                    {
-                        dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
-                    }
-
-                    dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
-                    dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
-                }
-                row++;
-                processedElements++;
-
-                // Update progress
-                if (processedElements % 10 == 0 || processedElements == totalElements)
-                {
-                    int percentage = (int)((double)processedElements / totalElements * 100);
-                    progressCallback(percentage);
-                }
-            }
-
-            worksheet.Columns.AutoFit();
-        }
-
-        // Thread-safe version of CreateParameterColorLegend
-        private void CreateParameterColorLegendThread(Excel.Worksheet colorLegendSheet)
-        {
-            // Same content as CreateParameterColorLegend but renamed for clarity
-            // [Copy the entire content of CreateParameterColorLegend method here]
-            // The method doesn't access UI elements so it's already thread-safe
-            CreateParameterColorLegend(colorLegendSheet);
         }
 
         private void ImportFromExcel()
@@ -1269,6 +1034,8 @@ namespace ExcelLink.Forms
             // Exclude "Type Name" and "Family Name" parameters
             parameterNames.Remove("Type Name");
             parameterNames.Remove("Family Name");
+            parameterNames.Remove("Category");
+            parameterNames.Remove("Type Id");
 
             // Create parameter items
             foreach (string paramName in parameterNames.OrderBy(p => p))
@@ -1412,28 +1179,26 @@ namespace ExcelLink.Forms
 
         #region Parameter Search Methods
 
+        private void ApplyParameterFilter()
+        {
+            string searchText = txtParameterSearch.Text.ToLower();
+            if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
+            {
+                lvAvailableParameters.ItemsSource = AvailableParameterItems;
+            }
+            else
+            {
+                var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
+                lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
+            }
+        }
+
         private void txtParameterSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
             System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
             if (textBox != null && textBox.IsFocused)
             {
-                string searchText = textBox.Text.ToLower();
-
-                if (searchText == "search parameters...")
-                {
-                    lvAvailableParameters.ItemsSource = AvailableParameterItems;
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(searchText))
-                {
-                    lvAvailableParameters.ItemsSource = AvailableParameterItems;
-                }
-                else
-                {
-                    var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
-                    lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
-                }
+                ApplyParameterFilter();
             }
         }
 
@@ -1451,8 +1216,8 @@ namespace ExcelLink.Forms
             System.Windows.Controls.TextBox textBox = sender as System.Windows.Controls.TextBox;
             if (textBox != null && string.IsNullOrWhiteSpace(textBox.Text))
             {
-                lvAvailableParameters.ItemsSource = AvailableParameterItems;
                 textBox.Text = "Search parameters...";
+                ApplyParameterFilter();
             }
         }
 
@@ -1464,7 +1229,7 @@ namespace ExcelLink.Forms
         {
             if (lvAvailableParameters.SelectedItem is ParaExportParameterItem item)
             {
-                MoveParameter(item, AvailableParameterItems, SelectedParameterItems);
+                MoveParameters(new List<ParaExportParameterItem> { item }, AvailableParameterItems, SelectedParameterItems);
             }
         }
 
@@ -1472,81 +1237,46 @@ namespace ExcelLink.Forms
         {
             if (lvSelectedParameters.SelectedItem is ParaExportParameterItem item)
             {
-                MoveParameter(item, SelectedParameterItems, AvailableParameterItems);
+                MoveParameters(new List<ParaExportParameterItem> { item }, SelectedParameterItems, AvailableParameterItems);
             }
         }
 
-        private void MoveParameter(ParaExportParameterItem item, ObservableCollection<ParaExportParameterItem> source, ObservableCollection<ParaExportParameterItem> destination)
+        private void MoveParameters(IEnumerable<ParaExportParameterItem> itemsToMove, ObservableCollection<ParaExportParameterItem> source, ObservableCollection<ParaExportParameterItem> destination)
         {
-            if (item != null)
+            var movedItems = itemsToMove.ToList();
+            foreach (var item in movedItems)
             {
-                source.Remove(item);
-                destination.Add(item);
-
-                // Re-apply the current search filter
-                string searchText = txtParameterSearch.Text.ToLower();
-                if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
+                if (source.Contains(item)) // Ensure the item exists before removal
                 {
-                    lvAvailableParameters.ItemsSource = AvailableParameterItems;
-                }
-                else
-                {
-                    var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
-                    lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
+                    source.Remove(item);
+                    destination.Add(item);
                 }
             }
+
+            if (destination == AvailableParameterItems)
+            {
+                var sorted = destination.OrderBy(p => p.ParameterName).ToList();
+                destination.Clear();
+                foreach (var item in sorted)
+                {
+                    destination.Add(item);
+                }
+            }
+
+            // Always re-apply the filter after any move operation
+            ApplyParameterFilter();
         }
 
         private void btnMoveRight_Click(object sender, RoutedEventArgs e)
         {
             var selectedItems = lvAvailableParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
-
-            foreach (var item in selectedItems)
-            {
-                if (AvailableParameterItems.Contains(item))
-                {
-                    AvailableParameterItems.Remove(item);
-                    SelectedParameterItems.Add(item);
-                }
-            }
-
-            // Re-apply the current search filter
-            string searchText = txtParameterSearch.Text.ToLower();
-            if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
-            {
-                lvAvailableParameters.ItemsSource = AvailableParameterItems;
-            }
-            else
-            {
-                var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
-                lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
-            }
+            MoveParameters(selectedItems, AvailableParameterItems, SelectedParameterItems);
         }
 
         private void btnMoveLeft_Click(object sender, RoutedEventArgs e)
         {
             var selectedItems = lvSelectedParameters.SelectedItems.Cast<ParaExportParameterItem>().ToList();
-
-            foreach (var item in selectedItems)
-            {
-                if (SelectedParameterItems.Contains(item))
-                {
-                    SelectedParameterItems.Remove(item);
-                    AvailableParameterItems.Add(item);
-                }
-            }
-
-            // Re-apply the current search filter
-            string searchText = txtParameterSearch.Text.ToLower();
-            if (string.IsNullOrWhiteSpace(searchText) || searchText == "search parameters...")
-            {
-                lvAvailableParameters.ItemsSource = AvailableParameterItems;
-            }
-            else
-            {
-                var filteredParameters = AvailableParameterItems.Where(p => p.ParameterName.ToLower().Contains(searchText));
-                lvAvailableParameters.ItemsSource = new ObservableCollection<ParaExportParameterItem>(filteredParameters);
-            }
+            MoveParameters(selectedItems, SelectedParameterItems, AvailableParameterItems);
         }
 
         private void btnMoveUp_Click(object sender, RoutedEventArgs e)
@@ -1582,33 +1312,32 @@ namespace ExcelLink.Forms
 
         private void btnMoveAllRight_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var item in AvailableParameterItems.ToList())
-            {
-                AvailableParameterItems.Remove(item);
-                SelectedParameterItems.Add(item);
-            }
+            string searchText = txtParameterSearch.Text;
+            bool isSearching = !string.IsNullOrWhiteSpace(searchText) && searchText != "Search parameters...";
+
+            var itemsToMove = isSearching
+                ? lvAvailableParameters.Items.Cast<ParaExportParameterItem>().ToList()
+                : AvailableParameterItems.ToList();
+
+            MoveParameters(itemsToMove, AvailableParameterItems, SelectedParameterItems);
         }
 
         private void btnMoveAllLeft_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var item in SelectedParameterItems.ToList())
-            {
-                SelectedParameterItems.Remove(item);
-                AvailableParameterItems.Add(item);
-            }
+            var allSelectedItems = SelectedParameterItems.ToList();
+            MoveParameters(allSelectedItems, SelectedParameterItems, AvailableParameterItems);
         }
 
         #endregion
         #region Excel Export Helper Methods
 
-        private void ProcessCategoryForExport(Excel.Worksheet worksheet, ParaExportCategoryItem categoryItem, Action<int> progressCallback)
+        private void ProcessCategoryForExport(Excel.Worksheet worksheet, ParaExportCategoryItem categoryItem, List<string> selectedParameters, bool isEntireModel, ElementId activeViewId, Action<int> progressCallback)
         {
             // Write headers with multi-line text
             Excel.Range elementIdHeader = (Excel.Range)worksheet.Cells[1, 1];
             elementIdHeader.Value2 = "Element ID";
             elementIdHeader.ColumnWidth = 12;
 
-            List<string> selectedParameters = SelectedParameterNames;
             for (int i = 0; i < selectedParameters.Count; i++)
             {
                 string paramName = selectedParameters[i];
@@ -1617,13 +1346,13 @@ namespace ExcelLink.Forms
 
                 // Get parameter info
                 FilteredElementCollector tempCollector;
-                if (IsEntireModelChecked)
+                if (isEntireModel)
                 {
                     tempCollector = new FilteredElementCollector(_doc);
                 }
                 else
                 {
-                    tempCollector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                    tempCollector = new FilteredElementCollector(_doc, activeViewId);
                 }
 
                 tempCollector.OfCategoryId(categoryItem.Category.Id);
@@ -1711,13 +1440,13 @@ namespace ExcelLink.Forms
 
             // Get elements
             FilteredElementCollector dataCollector;
-            if (IsEntireModelChecked)
+            if (isEntireModel)
             {
                 dataCollector = new FilteredElementCollector(_doc);
             }
             else
             {
-                dataCollector = new FilteredElementCollector(_doc, _doc.ActiveView.Id);
+                dataCollector = new FilteredElementCollector(_doc, activeViewId);
             }
             dataCollector.OfCategoryId(categoryItem.Category.Id);
             dataCollector.WhereElementIsNotElementType();
