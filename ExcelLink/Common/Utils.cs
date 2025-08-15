@@ -121,32 +121,17 @@ namespace ExcelLink.Common
                 switch (curParam.StorageType)
                 {
                     case StorageType.Double:
-                        double dValue = curParam.AsDouble();
-
-#if REVIT2021 || REVIT2022 || REVIT2023 || REVIT2024 || REVIT2025
-                        // For Revit 2021 and later, use ForgeTypeId
-                        try
+                        // AsValueString returns the value formatted according to project units, including the unit symbol.
+                        string valueString = curParam.AsValueString();
+                        // If it's null or empty (e.g., for a parameter with no value set), fall back to AsDouble().
+                        if (!string.IsNullOrEmpty(valueString))
                         {
-                            ForgeTypeId unitTypeId = curParam.GetUnitTypeId();
-                            if (unitTypeId != null && !unitTypeId.Empty())
-                            {
-                                dValue = UnitUtils.ConvertFromInternalUnits(dValue, unitTypeId);
-                            }
+                            return valueString;
                         }
-                        catch { }
-#else
-                        // For Revit 2020 and earlier, use DisplayUnitType
-                        try
+                        else
                         {
-                            DisplayUnitType dut = curParam.DisplayUnitType;
-                            if (dut != DisplayUnitType.DUT_UNDEFINED)
-                            {
-                                dValue = UnitUtils.ConvertFromInternalUnits(dValue, dut);
-                            }
+                            return curParam.AsDouble().ToString();
                         }
-                        catch { }
-#endif
-                        return dValue.ToString();
 
                     case StorageType.Integer:
                         // Check if it's a Yes/No parameter
@@ -193,10 +178,40 @@ namespace ExcelLink.Common
                     {
                         case StorageType.Double:
                             double dValue;
+#if REVIT2021 || REVIT2022 || REVIT2023 || REVIT2024 || REVIT2025
+                            try
+                            {
+                                ForgeTypeId specTypeId = curParam.GetUnitTypeId();
+                                if (specTypeId != null && !specTypeId.Empty())
+                                {
+                                    if (UnitFormatUtils.TryParse(curElem.Document.GetUnits(), specTypeId, value, out dValue))
+                                    {
+                                        curParam.Set(dValue);
+                                        return true;
+                                    }
+                                }
+                            }
+                            catch { }
+#else
+                            try
+                            {
+                                DisplayUnitType dut = curParam.DisplayUnitType;
+                                if (dut != DisplayUnitType.DUT_UNDEFINED)
+                                {
+                                    if(UnitUtils.TryParse(curElem.Document, dut, value, out dValue))
+                                    {
+                                        curParam.Set(dValue);
+                                        return true;
+                                    }
+                                }
+                            }
+                            catch { }
+#endif
+
+                            // Fallback for plain numbers if parsing with units fails
                             if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out dValue))
                             {
 #if REVIT2021 || REVIT2022 || REVIT2023 || REVIT2024 || REVIT2025
-                                // For Revit 2021 and later, use ForgeTypeId
                                 try
                                 {
                                     ForgeTypeId unitTypeId = curParam.GetUnitTypeId();
@@ -207,7 +222,6 @@ namespace ExcelLink.Common
                                 }
                                 catch { }
 #else
-                                // For Revit 2020 and earlier, use DisplayUnitType
                                 try
                                 {
                                     DisplayUnitType dut = curParam.DisplayUnitType;
@@ -362,7 +376,7 @@ namespace ExcelLink.Common
                 case StorageType.String:
                     return "Text";
                 case StorageType.ElementId:
-                    return "Unknown";
+                    return "ElementId";
                 default:
                     return "Unknown";
             }
