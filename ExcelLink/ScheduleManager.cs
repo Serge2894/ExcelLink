@@ -106,7 +106,6 @@ namespace ExcelLink.Common
                 }
 
                 int numberOfRows = bodySection.NumberOfRows;
-                int numberOfColumns = visibleFields.Count > 0 ? visibleFields.Count : bodySection.NumberOfColumns;
 
                 if (includeHeaders)
                 {
@@ -172,6 +171,9 @@ namespace ExcelLink.Common
                     simpleData.BodyRows.Add(rowData);
                 }
 
+                // =================================================================================
+                // MODIFICATION: Using a more robust heuristic to identify special rows.
+                // =================================================================================
                 foreach (var rowData in simpleData.BodyRows)
                 {
                     bool isBlank = rowData.All(string.IsNullOrWhiteSpace);
@@ -184,8 +186,18 @@ namespace ExcelLink.Common
                     }
 
                     bool isHeaderOrFooter = false;
+                    var firstCellText = rowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+                    if (firstCellText != null)
+                    {
+                        // A row is a header/footer if its first text contains "total" or a colon (like a group count "Category: 5")
+                        if (firstCellText.ToLower().Contains("total") || firstCellText.Contains(":"))
+                        {
+                            isHeaderOrFooter = true;
+                        }
+                    }
                     simpleData.IsGroupHeaderOrFooterRow.Add(isHeaderOrFooter);
                 }
+
 
                 if (definition.ShowGrandTotal)
                 {
@@ -367,9 +379,6 @@ namespace ExcelLink.Common
                     Excel.Range headerCell = (Excel.Range)worksheet.Cells[startRow, col + 1];
                     string headerText = scheduleData.Headers[col];
 
-                    // =================================================================================
-                    // MODIFICATION: The block adding "(Shared)" is removed.
-                    // =================================================================================
                     if (col < scheduleData.FieldInfos.Count)
                     {
                         var fieldInfo = scheduleData.FieldInfos[col];
@@ -399,14 +408,8 @@ namespace ExcelLink.Common
                 var currentRowData = scheduleData.BodyRows[row];
                 int currentRowInExcel = startRow + row;
 
-                bool isBlankLine = row < scheduleData.IsBlankLineRow.Count && scheduleData.IsBlankLineRow[row];
-                bool isHeaderOrFooter = row < scheduleData.IsGroupHeaderOrFooterRow.Count && scheduleData.IsGroupHeaderOrFooterRow[row];
-
-                if (isBlankLine || isHeaderOrFooter)
-                {
-                    Excel.Range specialRowRange = worksheet.Range[worksheet.Cells[currentRowInExcel, 1], worksheet.Cells[currentRowInExcel, currentColCount]];
-                    specialRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
-                }
+                bool isBlankLine = scheduleData.IsBlankLineRow[row];
+                bool isHeaderOrFooter = scheduleData.IsGroupHeaderOrFooterRow[row];
 
                 for (int col = 0; col < currentRowData.Count; col++)
                 {
@@ -415,7 +418,21 @@ namespace ExcelLink.Common
                     dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                     dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-                    if (!isBlankLine && !isHeaderOrFooter)
+                    // Apply coloring logic
+                    if (isBlankLine || isHeaderOrFooter)
+                    {
+                        // Default to grey for these special rows
+                        dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+
+                        // Override for grand totals specifically
+                        var firstCellText = currentRowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+                        if (firstCellText != null && firstCellText.ToLower().Contains("total"))
+                        {
+                            dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
+                            dataCell.Font.Bold = true;
+                        }
+                    }
+                    else // It's a data row
                     {
                         if (col < scheduleData.ColumnProperties.Count)
                         {
@@ -447,13 +464,15 @@ namespace ExcelLink.Common
 
                 foreach (var summaryRow in scheduleData.SummaryRows)
                 {
+                    Excel.Range summaryRowRange = worksheet.Range[worksheet.Cells[summaryStartRow, 1], worksheet.Cells[summaryStartRow, currentColCount]];
+                    summaryRowRange.Font.Bold = true;
+                    summaryRowRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                    summaryRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
+
                     for (int col = 0; col < summaryRow.Count; col++)
                     {
                         Excel.Range summaryCell = (Excel.Range)worksheet.Cells[summaryStartRow, col + 1];
                         summaryCell.Value2 = summaryRow[col];
-                        summaryCell.Font.Bold = true;
-                        summaryCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
-                        summaryCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
                     }
                     summaryStartRow++;
                 }
@@ -572,7 +591,8 @@ namespace ExcelLink.Common
                     if (cellColor != null)
                     {
                         int colorValue = Convert.ToInt32(cellColor);
-                        if (colorValue == ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC")))
+                        if (colorValue == ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC")) ||
+                            colorValue == ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC")))
                         {
                             continue;
                         }
