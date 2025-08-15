@@ -119,6 +119,7 @@
             </StackPanel>
         </DataTemplate>
 
+
         <DataTemplate x:Key="ScheduleItemTemplate">
             <StackPanel Orientation="Horizontal">
                 <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
@@ -161,7 +162,7 @@
             </Grid>
         </Border>
 
-        <TabControl x:Name="mainTabControl" Grid.Row="1" Margin="10">
+        <TabControl x:Name="mainTabControl" Grid.Row="1" Margin="10" SelectionChanged="mainTabControl_SelectionChanged">
             <TabControl.Resources>
                 <Style TargetType="TabItem">
                     <Setter Property="Template">

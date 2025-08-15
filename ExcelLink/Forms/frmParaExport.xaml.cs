@@ -1376,6 +1376,21 @@ namespace ExcelLink.Forms
             ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 35;
             ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
         }
+
+        private void mainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.Source is System.Windows.Controls.TabControl && mainTabControl.IsLoaded)
+            {
+                if ((mainTabControl.SelectedItem as TabItem)?.Header?.ToString() == "Schedules")
+                {
+                    Dispatcher.BeginInvoke((Action)(() =>
+                    {
+                        lvSchedules.Focus();
+                        Keyboard.ClearFocus();
+                    }), DispatcherPriority.ContextIdle);
+                }
+            }
+        }
         #endregion
 
     }
