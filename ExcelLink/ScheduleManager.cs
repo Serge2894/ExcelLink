@@ -171,9 +171,6 @@ namespace ExcelLink.Common
                     simpleData.BodyRows.Add(rowData);
                 }
 
-                // =================================================================================
-                // MODIFICATION: Using a more robust heuristic to identify special rows.
-                // =================================================================================
                 foreach (var rowData in simpleData.BodyRows)
                 {
                     bool isBlank = rowData.All(string.IsNullOrWhiteSpace);
@@ -187,10 +184,15 @@ namespace ExcelLink.Common
 
                     bool isHeaderOrFooter = false;
                     var firstCellText = rowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+                    int nonEmptyCount = rowData.Count(c => !string.IsNullOrWhiteSpace(c));
+
                     if (firstCellText != null)
                     {
-                        // A row is a header/footer if its first text contains "total" or a colon (like a group count "Category: 5")
                         if (firstCellText.ToLower().Contains("total") || firstCellText.Contains(":"))
+                        {
+                            isHeaderOrFooter = true;
+                        }
+                        else if (nonEmptyCount == 1)
                         {
                             isHeaderOrFooter = true;
                         }
@@ -371,37 +373,23 @@ namespace ExcelLink.Common
                 Excel.Range headerRowRange = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
                 headerRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
                 headerRowRange.Font.Bold = true;
-                headerRowRange.WrapText = true;
+                headerRowRange.WrapText = false;
                 headerRowRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+                headerRowRange.VerticalAlignment = Excel.XlVAlign.xlVAlignCenter;
 
                 for (int col = 0; col < scheduleData.Headers.Count; col++)
                 {
                     Excel.Range headerCell = (Excel.Range)worksheet.Cells[startRow, col + 1];
-                    string headerText = scheduleData.Headers[col];
-
-                    if (col < scheduleData.FieldInfos.Count)
-                    {
-                        var fieldInfo = scheduleData.FieldInfos[col];
-                        if (fieldInfo.IsCount)
-                        {
-                            headerText += "\n(Count)";
-                        }
-                        else if (fieldInfo.IsCalculatedField)
-                        {
-                            headerText += "\n(Calculated)";
-                        }
-                    }
-
-                    headerCell.Value2 = headerText;
-
-                    if (col < scheduleData.ColumnProperties.Count && scheduleData.ColumnProperties[col].IsCalculated)
-                    {
-                        headerCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#B19CD9"));
-                    }
+                    headerCell.Value2 = scheduleData.Headers[col];
                 }
-                ((Excel.Range)worksheet.Rows[startRow]).RowHeight = 45;
+                ((Excel.Range)worksheet.Rows[startRow]).RowHeight = 25;
                 startRow++;
             }
+
+            // =================================================================================
+            // MODIFICATION: The manually added blank row has been removed.
+            // The blank row from the Revit schedule data will be handled in the loop below.
+            // =================================================================================
 
             for (int row = 0; row < scheduleData.BodyRows.Count; row++)
             {
@@ -418,13 +406,10 @@ namespace ExcelLink.Common
                     dataCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                     dataCell.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-                    // Apply coloring logic
                     if (isBlankLine || isHeaderOrFooter)
                     {
-                        // Default to grey for these special rows
                         dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
 
-                        // Override for grand totals specifically
                         var firstCellText = currentRowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
                         if (firstCellText != null && firstCellText.ToLower().Contains("total"))
                         {
@@ -432,7 +417,7 @@ namespace ExcelLink.Common
                             dataCell.Font.Bold = true;
                         }
                     }
-                    else // It's a data row
+                    else
                     {
                         if (col < scheduleData.ColumnProperties.Count)
                         {
@@ -578,6 +563,9 @@ namespace ExcelLink.Common
 
             Excel.Range usedRange = worksheet.UsedRange;
             int excelRows = usedRange.Rows.Count;
+            // =================================================================================
+            // MODIFICATION: Start row for import is now 4, as the manually added row was removed.
+            // =================================================================================
             int startRow = 4;
 
             for (int i = startRow; i <= excelRows; i++)
@@ -604,11 +592,29 @@ namespace ExcelLink.Common
                     Element element = FindElementFromSchedule(schedule, keyValue, visibleFields);
                     if (element == null)
                     {
-                        errors.Add(new ImportErrorItem { ElementId = keyValue, Description = "Element not found in schedule" });
-                        continue;
+                        // It might be a data row where the key is in another column, check other cells for an ID
+                        bool found = false;
+                        for (int c = 2; c <= usedRange.Columns.Count; c++)
+                        {
+                            var dataCell = usedRange.Cells[i, c] as Excel.Range;
+                            if (dataCell != null && dataCell.Value2 != null)
+                            {
+                                element = FindElementFromSchedule(schedule, dataCell.Value2.ToString(), visibleFields);
+                                if (element != null)
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!found)
+                        {
+                            errors.Add(new ImportErrorItem { ElementId = keyValue, Description = "Element not found in schedule" });
+                            continue;
+                        }
                     }
 
-                    for (int col = 0; col < editableFieldIndices.Count && col < usedRange.Columns.Count - 1; col++)
+                    for (int col = 0; col < editableFieldIndices.Count && col < usedRange.Columns.Count; col++)
                     {
                         int fieldIndex = editableFieldIndices[col];
                         if (fieldIndex >= visibleFields.Count) continue;
@@ -618,7 +624,7 @@ namespace ExcelLink.Common
                         if (field.IsCalculatedField || field.FieldType == ScheduleFieldType.Count)
                             continue;
 
-                        var dataCell = usedRange.Cells[i, col + 2] as Excel.Range;
+                        var dataCell = usedRange.Cells[i, col + 1] as Excel.Range;
                         if (dataCell == null || dataCell.Value2 == null) continue;
 
                         string value = dataCell.Value2.ToString();
@@ -681,22 +687,20 @@ namespace ExcelLink.Common
                     return element;
             }
 
-            if (visibleFields.Any())
+            foreach (var field in visibleFields)
             {
-                var firstField = visibleFields.First();
-                string fieldName = firstField.GetName();
-
                 foreach (var element in elements)
                 {
-                    Parameter param = GetParameterByField(element, firstField);
+                    Parameter param = GetParameterByField(element, field);
                     if (param != null)
                     {
-                        string paramValue = Utils.GetParameterValue(element, fieldName);
+                        string paramValue = Utils.GetParameterValue(element, field.GetName());
                         if (paramValue == keyValue)
                             return element;
                     }
                 }
             }
+
 
             return null;
         }
@@ -731,51 +735,46 @@ namespace ExcelLink.Common
             legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
             legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-            ((Excel.Range)colorLegendSheet.Cells[4, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
-            ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Type value";
-            ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Type parameters with the same ID should be filled the same";
+            int row = 4;
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Type value";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Type parameters with the same ID should be filled the same";
 
-            ((Excel.Range)colorLegendSheet.Cells[5, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
-            ((Excel.Range)colorLegendSheet.Cells[5, 3]).Value2 = "Read-only value";
-            ((Excel.Range)colorLegendSheet.Cells[5, 4]).Value2 = "Uneditable cell";
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FF4747"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Read-only value";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Uneditable cell";
 
-            ((Excel.Range)colorLegendSheet.Cells[6, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
-            ((Excel.Range)colorLegendSheet.Cells[6, 3]).Value2 = "Parameter does not exist for element";
-            ((Excel.Range)colorLegendSheet.Cells[6, 4]).Value2 = "Applies to Category export only";
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Parameter does not exist for element";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Applies to Category export only";
 
-            ((Excel.Range)colorLegendSheet.Cells[7, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
-            ((Excel.Range)colorLegendSheet.Cells[7, 3]).Value2 = "Title / Main Header Row";
-            ((Excel.Range)colorLegendSheet.Cells[7, 4]).Value2 = "Indicates a title or header row";
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Title / Main Header Row";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Indicates a title or header row";
 
-            ((Excel.Range)colorLegendSheet.Cells[8, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
-            ((Excel.Range)colorLegendSheet.Cells[8, 3]).Value2 = "Separator / Index / Group Header or Blank Line";
-            ((Excel.Range)colorLegendSheet.Cells[8, 4]).Value2 = "Indicates a separator, index row, or a schedule group header/footer/blank line";
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Separator / Index / Group Header or Blank Line";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Indicates a separator, index row, or a schedule group header/footer/blank line";
 
-            ((Excel.Range)colorLegendSheet.Cells[9, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#B19CD9"));
-            ((Excel.Range)colorLegendSheet.Cells[9, 3]).Value2 = "Calculated Field Header";
-            ((Excel.Range)colorLegendSheet.Cells[9, 4]).Value2 = "Header for calculated or count fields in schedules";
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#E6E6FA"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Calculated Field Value";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Values from calculated or count fields (read-only)";
 
-            ((Excel.Range)colorLegendSheet.Cells[10, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#E6E6FA"));
-            ((Excel.Range)colorLegendSheet.Cells[10, 3]).Value2 = "Calculated Field Value";
-            ((Excel.Range)colorLegendSheet.Cells[10, 4]).Value2 = "Values from calculated or count fields (read-only)";
+            ((Excel.Range)colorLegendSheet.Cells[row, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
+            ((Excel.Range)colorLegendSheet.Cells[row, 3]).Value2 = "Summary/Grand Total Row";
+            ((Excel.Range)colorLegendSheet.Cells[row++, 4]).Value2 = "Summary or grand total rows from schedules";
 
-            ((Excel.Range)colorLegendSheet.Cells[11, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
-            ((Excel.Range)colorLegendSheet.Cells[11, 3]).Value2 = "Summary/Grand Total Row";
-            ((Excel.Range)colorLegendSheet.Cells[11, 4]).Value2 = "Summary or grand total rows from schedules";
-
-            Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[11, 4]];
+            Excel.Range dataRange = colorLegendSheet.Range[colorLegendSheet.Cells[4, 2], colorLegendSheet.Cells[row - 1, 4]];
             dataRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
             dataRange.Borders.Weight = Excel.XlBorderWeight.xlThin;
 
-            Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[11, 4]];
+            Excel.Range entireTable = colorLegendSheet.Range[colorLegendSheet.Cells[3, 2], colorLegendSheet.Cells[row - 1, 4]];
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeLeft].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeTop].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
 
-            ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
-            ((Excel.Range)colorLegendSheet.Columns[3]).ColumnWidth = 35;
-            ((Excel.Range)colorLegendSheet.Columns[4]).ColumnWidth = 50;
+            colorLegendSheet.Columns.AutoFit();
         }
     }
 
