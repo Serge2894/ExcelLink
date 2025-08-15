@@ -16,8 +16,8 @@ namespace ExcelLink.Common
     {
         public bool IsReadOnly { get; set; }
         public bool IsType { get; set; }
-        public bool IsCalculated { get; set; } // Added for calculated fields
-        public string FieldType { get; set; } // Added to identify field type
+        public bool IsCalculated { get; set; }
+        public string FieldType { get; set; }
     }
 
     /// <summary>
@@ -33,8 +33,8 @@ namespace ExcelLink.Common
         public List<List<string>> SummaryRows { get; set; }
         public List<bool> IsGroupHeaderOrFooterRow { get; set; }
         public List<bool> IsBlankLineRow { get; set; }
-        // Added to store field information
         public List<ScheduleFieldInfo> FieldInfos { get; set; }
+        public List<List<bool>> ParameterExistsForRow { get; set; }
     }
 
     /// <summary>
@@ -61,14 +61,13 @@ namespace ExcelLink.Common
 
         public List<ViewSchedule> GetAllSchedules()
         {
-            FilteredElementCollector collector = new FilteredElementCollector(_doc);
+            var collector = new FilteredElementCollector(_doc);
             var schedules = collector
                 .OfClass(typeof(ViewSchedule))
                 .Cast<ViewSchedule>()
                 .Where(s => !s.IsTemplate && !s.IsTitleblockRevisionSchedule && s.Definition != null)
                 .OrderBy(s => s.Name)
                 .ToList();
-
             return schedules;
         }
 
@@ -88,7 +87,8 @@ namespace ExcelLink.Common
                     SummaryRows = new List<List<string>>(),
                     IsGroupHeaderOrFooterRow = new List<bool>(),
                     IsBlankLineRow = new List<bool>(),
-                    FieldInfos = new List<ScheduleFieldInfo>()
+                    FieldInfos = new List<ScheduleFieldInfo>(),
+                    ParameterExistsForRow = new List<List<bool>>()
                 };
 
                 ScheduleDefinition definition = schedule.Definition;
@@ -99,68 +99,52 @@ namespace ExcelLink.Common
                 for (int i = 0; i < definition.GetFieldCount(); i++)
                 {
                     var field = definition.GetField(i);
-                    if (!field.IsHidden)
-                    {
-                        visibleFields.Add(field);
-                    }
+                    if (!field.IsHidden) visibleFields.Add(field);
                 }
 
                 int numberOfRows = bodySection.NumberOfRows;
+                var elementsInSchedule = new FilteredElementCollector(_doc, schedule.Id).WhereElementIsNotElementType().ToList();
 
                 if (includeHeaders)
                 {
-                    Element sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
-                    Element sampleTypeElement = sampleElement != null ? _doc.GetElement(sampleElement.GetTypeId()) : null;
-
                     for (int colIdx = 0; colIdx < visibleFields.Count; colIdx++)
                     {
                         var field = visibleFields[colIdx];
-                        string headerText = field.GetName();
-                        simpleData.Headers.Add(headerText);
+                        simpleData.Headers.Add(field.GetName());
                         simpleData.ColumnLetters.Add(GetExcelColumnName(colIdx + 1));
-
                         var fieldInfo = GetScheduleFieldInfo(field, definition);
                         simpleData.FieldInfos.Add(fieldInfo);
 
                         var colProp = new ColumnProperty
                         {
-                            IsReadOnly = true,
-                            IsType = false,
-                            IsCalculated = fieldInfo.IsCalculatedField || fieldInfo.IsCount,
-                            FieldType = fieldInfo.FieldType.ToString()
+                            IsCalculated = fieldInfo.IsCalculatedField || fieldInfo.IsCount
                         };
 
-                        if (!fieldInfo.IsCalculatedField && !fieldInfo.IsCount)
+                        if (!colProp.IsCalculated)
                         {
-                            if (sampleElement != null)
+                            bool isEverWritable = false, isEverInstance = false, isEverType = false;
+                            foreach (var element in elementsInSchedule)
                             {
-                                Parameter param = GetParameterByField(sampleElement, field);
-                                if (param != null)
+                                if (GetParameterByField(element, field) is Parameter instParam)
                                 {
-                                    colProp.IsReadOnly = param.IsReadOnly;
-                                    colProp.IsType = false;
+                                    isEverInstance = true;
+                                    if (!instParam.IsReadOnly) isEverWritable = true;
                                 }
-                                else if (sampleTypeElement != null)
+                                else if (_doc.GetElement(element.GetTypeId()) is Element typeElement && GetParameterByField(typeElement, field) is Parameter typeParam)
                                 {
-                                    param = GetParameterByField(sampleTypeElement, field);
-                                    if (param != null)
-                                    {
-                                        colProp.IsReadOnly = param.IsReadOnly;
-                                        colProp.IsType = true;
-                                    }
+                                    isEverType = true;
+                                    if (!typeParam.IsReadOnly) isEverWritable = true;
                                 }
                             }
+                            colProp.IsReadOnly = !isEverWritable;
+                            colProp.IsType = isEverType && !isEverInstance;
+                            if (fieldInfo.IsSharedParameter) colProp.IsReadOnly = false;
                         }
                         simpleData.ColumnProperties.Add(colProp);
                     }
                 }
 
-                int bodyStartRow = 0;
-                if (definition.ShowHeaders && numberOfRows > 0)
-                {
-                    bodyStartRow = 1;
-                }
-
+                int bodyStartRow = (definition.ShowHeaders && numberOfRows > 0) ? 1 : 0;
                 for (int row = bodyStartRow; row < numberOfRows; row++)
                 {
                     var rowData = new List<string>();
@@ -175,36 +159,55 @@ namespace ExcelLink.Common
                 {
                     bool isBlank = rowData.All(string.IsNullOrWhiteSpace);
                     simpleData.IsBlankLineRow.Add(isBlank);
-
                     if (isBlank)
                     {
                         simpleData.IsGroupHeaderOrFooterRow.Add(false);
                         continue;
                     }
-
-                    bool isHeaderOrFooter = false;
                     var firstCellText = rowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
                     int nonEmptyCount = rowData.Count(c => !string.IsNullOrWhiteSpace(c));
-
-                    if (firstCellText != null)
-                    {
-                        if (firstCellText.ToLower().Contains("total") || firstCellText.Contains(":"))
-                        {
-                            isHeaderOrFooter = true;
-                        }
-                        else if (nonEmptyCount == 1)
-                        {
-                            isHeaderOrFooter = true;
-                        }
-                    }
+                    bool isHeaderOrFooter = (firstCellText != null && (firstCellText.ToLower().Contains("total") || firstCellText.Contains(":"))) || nonEmptyCount == 1;
                     simpleData.IsGroupHeaderOrFooterRow.Add(isHeaderOrFooter);
                 }
 
+                int elementIndex = 0;
+                for (int i = 0; i < simpleData.BodyRows.Count; i++)
+                {
+                    var parameterExistsList = new List<bool>(new bool[simpleData.Headers.Count]);
+                    if (!simpleData.IsBlankLineRow[i] && !simpleData.IsGroupHeaderOrFooterRow[i] && elementIndex < elementsInSchedule.Count)
+                    {
+                        Element elementForRow = elementsInSchedule[elementIndex];
+                        for (int col = 0; col < simpleData.Headers.Count; col++)
+                        {
+                            var field = visibleFields[col];
+                            var fieldInfo = simpleData.FieldInfos[col];
+
+                            if (fieldInfo.IsCalculatedField || fieldInfo.IsCount)
+                            {
+                                parameterExistsList[col] = true;
+                            }
+                            else
+                            {
+                                Parameter param = GetParameterByField(elementForRow, field);
+                                if (param == null && _doc.GetElement(elementForRow.GetTypeId()) is Element typeElem)
+                                {
+                                    param = GetParameterByField(typeElem, field);
+                                }
+                                if (param != null)
+                                {
+                                    parameterExistsList[col] = true;
+                                }
+                            }
+                        }
+                        elementIndex++;
+                    }
+                    simpleData.ParameterExistsForRow.Add(parameterExistsList);
+                }
 
                 if (definition.ShowGrandTotal)
                 {
-                    TableSectionData summarySection = tableData.GetSectionData(SectionType.Summary);
-                    if (summarySection != null && summarySection.NumberOfRows > 0)
+                    var summarySection = tableData.GetSectionData(SectionType.Summary);
+                    if (summarySection != null)
                     {
                         for (int row = 0; row < summarySection.NumberOfRows; row++)
                         {
@@ -222,77 +225,55 @@ namespace ExcelLink.Common
             return allScheduleData;
         }
 
-        private ScheduleFieldInfo GetScheduleFieldInfo(ScheduleField field, ScheduleDefinition definition)
+        public ScheduleFieldInfo GetScheduleFieldInfo(ScheduleField field, ScheduleDefinition definition)
         {
             var fieldInfo = new ScheduleFieldInfo
             {
                 Name = field.GetName(),
-                IsCalculatedField = false,
-                IsSharedParameter = false,
-                IsCount = false,
                 FieldType = field.FieldType,
-                ParameterId = field.ParameterId
+                ParameterId = field.ParameterId,
+                IsCount = field.FieldType == ScheduleFieldType.Count,
+                IsCalculatedField = field.IsCalculatedField
             };
 
-            if (field.FieldType == ScheduleFieldType.Count)
-            {
-                fieldInfo.IsCount = true;
-                fieldInfo.IsCalculatedField = true;
-            }
-            else if (field.IsCalculatedField)
-            {
-                fieldInfo.IsCalculatedField = true;
-            }
-            else if (field.ParameterId != null && field.ParameterId != ElementId.InvalidElementId)
+            if (!fieldInfo.IsCalculatedField && field.ParameterId != null && field.ParameterId != ElementId.InvalidElementId)
             {
                 try
                 {
-                    SharedParameterElement sharedParam = _doc.GetElement(field.ParameterId) as SharedParameterElement;
-                    if (sharedParam != null)
+                    if (_doc.GetElement(field.ParameterId) is SharedParameterElement)
                     {
                         fieldInfo.IsSharedParameter = true;
                     }
                 }
                 catch { }
             }
-
             return fieldInfo;
         }
 
         public Parameter GetParameterByField(Element element, ScheduleField field)
         {
-            if (element == null || field == null)
-                return null;
+            if (element == null || field == null) return null;
 
-            if (field.ParameterId != null && field.ParameterId != ElementId.InvalidElementId)
+            if (field.ParameterId != null && field.ParameterId.IntegerValue != ElementId.InvalidElementId.IntegerValue)
             {
-                if (field.ParameterId.IntegerValue < 0)
+                // Check if it's a BuiltInParameter
+                if (Enum.IsDefined(typeof(BuiltInParameter), field.ParameterId.IntegerValue))
                 {
-                    BuiltInParameter builtInParam = (BuiltInParameter)field.ParameterId.IntegerValue;
-                    Parameter param = element.get_Parameter(builtInParam);
-                    if (param != null)
-                        return param;
+                    var bip = (BuiltInParameter)field.ParameterId.IntegerValue;
+                    if (element.get_Parameter(bip) is Parameter p) return p;
                 }
+                // Check if it's a shared/project parameter by iterating
                 else
                 {
-                    foreach (Parameter param in element.Parameters)
+                    foreach (Parameter p in element.Parameters)
                     {
-                        if (param.Id == field.ParameterId)
-                            return param;
+                        if (p.Id.Equals(field.ParameterId)) return p;
                     }
                 }
             }
 
-            string paramName = field.GetName();
-            Parameter paramByName = element.LookupParameter(paramName);
-            if (paramByName != null)
-                return paramByName;
-
-            BuiltInParameter bipByName = Utils.GetBuiltInParameterByName(paramName);
-            if (bipByName != BuiltInParameter.INVALID)
-            {
-                return element.get_Parameter(bipByName);
-            }
+            // Fallback for cases where ParameterId might not be reliable
+            if (element.LookupParameter(field.GetName()) is Parameter pByName) return pByName;
 
             return null;
         }
@@ -386,11 +367,6 @@ namespace ExcelLink.Common
                 startRow++;
             }
 
-            // =================================================================================
-            // MODIFICATION: The manually added blank row has been removed.
-            // The blank row from the Revit schedule data will be handled in the loop below.
-            // =================================================================================
-
             for (int row = 0; row < scheduleData.BodyRows.Count; row++)
             {
                 var currentRowData = scheduleData.BodyRows[row];
@@ -409,9 +385,7 @@ namespace ExcelLink.Common
                     if (isBlankLine || isHeaderOrFooter)
                     {
                         dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
-
-                        var firstCellText = currentRowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
-                        if (firstCellText != null && firstCellText.ToLower().Contains("total"))
+                        if (currentRowData.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c))?.ToLower().Contains("total") == true)
                         {
                             dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
                             dataCell.Font.Bold = true;
@@ -419,7 +393,13 @@ namespace ExcelLink.Common
                     }
                     else
                     {
-                        if (col < scheduleData.ColumnProperties.Count)
+                        bool parameterExists = scheduleData.ParameterExistsForRow.Count > row && scheduleData.ParameterExistsForRow[row].Count > col && scheduleData.ParameterExistsForRow[row][col];
+
+                        if (!parameterExists)
+                        {
+                            dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3"));
+                        }
+                        else if (col < scheduleData.ColumnProperties.Count)
                         {
                             var colProp = scheduleData.ColumnProperties[col];
                             if (colProp.IsCalculated)
@@ -439,12 +419,10 @@ namespace ExcelLink.Common
                 }
             }
 
-            if (scheduleData.SummaryRows != null && scheduleData.SummaryRows.Any())
+            if (scheduleData.SummaryRows.Any())
             {
                 int summaryStartRow = startRow + scheduleData.BodyRows.Count;
-
-                Excel.Range summarySeparator = worksheet.Range[worksheet.Cells[summaryStartRow, 1], worksheet.Cells[summaryStartRow, currentColCount]];
-                summarySeparator.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
+                worksheet.Range[worksheet.Cells[summaryStartRow, 1], worksheet.Cells[summaryStartRow, currentColCount]].Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
                 summaryStartRow++;
 
                 foreach (var summaryRow in scheduleData.SummaryRows)
@@ -453,16 +431,13 @@ namespace ExcelLink.Common
                     summaryRowRange.Font.Bold = true;
                     summaryRowRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
                     summaryRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
-
                     for (int col = 0; col < summaryRow.Count; col++)
                     {
-                        Excel.Range summaryCell = (Excel.Range)worksheet.Cells[summaryStartRow, col + 1];
-                        summaryCell.Value2 = summaryRow[col];
+                        ((Excel.Range)worksheet.Cells[summaryStartRow, col + 1]).Value2 = summaryRow[col];
                     }
                     summaryStartRow++;
                 }
             }
-
             worksheet.Columns.AutoFit();
         }
 
@@ -488,18 +463,15 @@ namespace ExcelLink.Common
 
         public List<ImportErrorItem> ImportSchedulesFromExcel(string excelFilePath, Action<int> progressCallback)
         {
-            List<ImportErrorItem> errors = new List<ImportErrorItem>();
+            var errors = new List<ImportErrorItem>();
             Excel.Application excel = null;
             Excel.Workbook workbook = null;
-
             try
             {
                 excel = new Excel.Application();
                 workbook = excel.Workbooks.Open(excelFilePath);
-
                 int totalSheets = workbook.Worksheets.Count;
                 int processedSheets = 0;
-
                 foreach (Excel.Worksheet worksheet in workbook.Worksheets)
                 {
                     if (worksheet.Name == "Color Legend")
@@ -507,147 +479,78 @@ namespace ExcelLink.Common
                         processedSheets++;
                         continue;
                     }
-
-                    ViewSchedule schedule = FindScheduleByName(worksheet.Name);
-                    if (schedule == null)
+                    if (FindScheduleByName(worksheet.Name) is ViewSchedule schedule)
+                    {
+                        errors.AddRange(ImportScheduleFromWorksheet(schedule, worksheet));
+                    }
+                    else
                     {
                         errors.Add(new ImportErrorItem { ElementId = "N/A", Description = $"Schedule '{worksheet.Name}' not found in model" });
-                        processedSheets++;
-                        continue;
                     }
-
-                    var importErrors = ImportScheduleFromWorksheet(schedule, worksheet);
-                    errors.AddRange(importErrors);
-
                     processedSheets++;
-                    int percentage = (int)((double)processedSheets / totalSheets * 100);
-                    progressCallback?.Invoke(percentage);
+                    progressCallback?.Invoke((int)((double)processedSheets / totalSheets * 100));
                 }
             }
             finally
             {
-                if (workbook != null)
-                {
-                    workbook.Close(false);
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
-                }
-                if (excel != null)
-                {
-                    excel.Quit();
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
-                }
+                if (workbook != null) workbook.Close(false);
+                if (excel != null) excel.Quit();
+                if (workbook != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+                if (excel != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(excel);
             }
             return errors;
         }
 
         private List<ImportErrorItem> ImportScheduleFromWorksheet(ViewSchedule schedule, Excel.Worksheet worksheet)
         {
-            List<ImportErrorItem> errors = new List<ImportErrorItem>();
-            ScheduleDefinition definition = schedule.Definition;
-
+            var errors = new List<ImportErrorItem>();
+            var definition = schedule.Definition;
             var visibleFields = new List<ScheduleField>();
-            var editableFieldIndices = new List<int>();
-
             for (int i = 0; i < definition.GetFieldCount(); i++)
             {
-                var field = definition.GetField(i);
-                if (!field.IsHidden)
-                {
-                    visibleFields.Add(field);
-                    if (!field.IsCalculatedField && field.FieldType != ScheduleFieldType.Count)
-                    {
-                        editableFieldIndices.Add(visibleFields.Count - 1);
-                    }
-                }
+                if (!definition.GetField(i).IsHidden) visibleFields.Add(definition.GetField(i));
             }
 
             Excel.Range usedRange = worksheet.UsedRange;
-            int excelRows = usedRange.Rows.Count;
-            // =================================================================================
-            // MODIFICATION: Start row for import is now 4, as the manually added row was removed.
-            // =================================================================================
-            int startRow = 4;
-
-            for (int i = startRow; i <= excelRows; i++)
+            for (int i = 4; i <= usedRange.Rows.Count; i++)
             {
                 try
                 {
                     var firstCell = usedRange.Cells[i, 1] as Excel.Range;
-                    if (firstCell == null) continue;
-
-                    var cellColor = firstCell.Interior.Color;
-                    if (cellColor != null)
+                    int cellColor = Convert.ToInt32(firstCell?.Interior.Color);
+                    if (cellColor == ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC")) ||
+                        cellColor == ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC")))
                     {
-                        int colorValue = Convert.ToInt32(cellColor);
-                        if (colorValue == ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC")) ||
-                            colorValue == ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC")))
-                        {
-                            continue;
-                        }
+                        continue;
                     }
 
-                    if (firstCell.Value2 == null) continue;
-                    string keyValue = firstCell.Value2.ToString();
+                    string keyValue = firstCell?.Value2?.ToString();
+                    if (string.IsNullOrEmpty(keyValue)) continue;
 
-                    Element element = FindElementFromSchedule(schedule, keyValue, visibleFields);
-                    if (element == null)
+                    if (FindElementFromSchedule(schedule, keyValue, visibleFields) is Element element)
                     {
-                        // It might be a data row where the key is in another column, check other cells for an ID
-                        bool found = false;
-                        for (int c = 2; c <= usedRange.Columns.Count; c++)
+                        for (int col = 0; col < visibleFields.Count && col < usedRange.Columns.Count; col++)
                         {
-                            var dataCell = usedRange.Cells[i, c] as Excel.Range;
-                            if (dataCell != null && dataCell.Value2 != null)
+                            var field = visibleFields[col];
+                            if (field.IsCalculatedField || field.FieldType == ScheduleFieldType.Count) continue;
+
+                            var dataCell = usedRange.Cells[i, col + 1] as Excel.Range;
+                            string value = dataCell?.Value2?.ToString();
+                            if (value == null) continue;
+
+                            if (!UpdateElementParameter(element, field, value))
                             {
-                                element = FindElementFromSchedule(schedule, dataCell.Value2.ToString(), visibleFields);
-                                if (element != null)
+                                errors.Add(new ImportErrorItem
                                 {
-                                    found = true;
-                                    break;
-                                }
+                                    ElementId = element.Id.IntegerValue.ToString(),
+                                    Description = $"Failed to update parameter '{field.GetName()}'"
+                                });
                             }
-                        }
-                        if (!found)
-                        {
-                            errors.Add(new ImportErrorItem { ElementId = keyValue, Description = "Element not found in schedule" });
-                            continue;
                         }
                     }
-
-                    for (int col = 0; col < editableFieldIndices.Count && col < usedRange.Columns.Count; col++)
+                    else
                     {
-                        int fieldIndex = editableFieldIndices[col];
-                        if (fieldIndex >= visibleFields.Count) continue;
-
-                        var field = visibleFields[fieldIndex];
-
-                        if (field.IsCalculatedField || field.FieldType == ScheduleFieldType.Count)
-                            continue;
-
-                        var dataCell = usedRange.Cells[i, col + 1] as Excel.Range;
-                        if (dataCell == null || dataCell.Value2 == null) continue;
-
-                        string value = dataCell.Value2.ToString();
-                        string paramName = field.GetName();
-
-                        bool success = UpdateElementParameter(element, field, value);
-                        if (!success)
-                        {
-                            Element typeElement = _doc.GetElement(element.GetTypeId());
-                            if (typeElement != null)
-                            {
-                                success = UpdateElementParameter(typeElement, field, value);
-                            }
-                        }
-
-                        if (!success)
-                        {
-                            errors.Add(new ImportErrorItem
-                            {
-                                ElementId = element.Id.IntegerValue.ToString(),
-                                Description = $"Failed to update parameter '{paramName}'"
-                            });
-                        }
+                        errors.Add(new ImportErrorItem { ElementId = keyValue, Description = "Element not found in schedule" });
                     }
                 }
                 catch (Exception ex)
@@ -661,54 +564,34 @@ namespace ExcelLink.Common
         private bool UpdateElementParameter(Element element, ScheduleField field, string value)
         {
             if (element == null || field == null) return false;
-
             try
             {
-                Parameter param = GetParameterByField(element, field);
-                if (param != null && !param.IsReadOnly)
+                if (GetParameterByField(element, field) is Parameter param && !param.IsReadOnly)
                 {
                     return Utils.SetParameterValue(element, param.Definition.Name, value);
                 }
+                if (_doc.GetElement(element.GetTypeId()) is Element typeElem && GetParameterByField(typeElem, field) is Parameter typeParam && !typeParam.IsReadOnly)
+                {
+                    return Utils.SetParameterValue(typeElem, typeParam.Definition.Name, value);
+                }
             }
             catch { }
-
             return false;
         }
 
         private Element FindElementFromSchedule(ViewSchedule schedule, string keyValue, List<ScheduleField> visibleFields)
         {
-            FilteredElementCollector collector = new FilteredElementCollector(_doc, schedule.Id);
-            var elements = collector.ToElements();
-
+            var elements = new FilteredElementCollector(_doc, schedule.Id).ToElements();
             if (int.TryParse(keyValue, out int elementId))
             {
-                Element element = _doc.GetElement(new ElementId(elementId));
-                if (element != null && elements.Any(e => e.Id == element.Id))
-                    return element;
+                if (elements.FirstOrDefault(e => e.Id.IntegerValue == elementId) is Element elem) return elem;
             }
-
-            foreach (var field in visibleFields)
-            {
-                foreach (var element in elements)
-                {
-                    Parameter param = GetParameterByField(element, field);
-                    if (param != null)
-                    {
-                        string paramValue = Utils.GetParameterValue(element, field.GetName());
-                        if (paramValue == keyValue)
-                            return element;
-                    }
-                }
-            }
-
-
             return null;
         }
 
         private ViewSchedule FindScheduleByName(string name)
         {
-            FilteredElementCollector collector = new FilteredElementCollector(_doc);
-            return collector
+            return new FilteredElementCollector(_doc)
                 .OfClass(typeof(ViewSchedule))
                 .Cast<ViewSchedule>()
                 .FirstOrDefault(s => s.Name == name || (s.Name.Length > 31 && s.Name.Substring(0, 31) == name));

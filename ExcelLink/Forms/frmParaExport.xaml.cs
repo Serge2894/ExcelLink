@@ -129,7 +129,6 @@ namespace ExcelLink.Forms
             lvSchedules.ItemsSource = ScheduleItems;
             lvScheduleParameters.ItemsSource = ScheduleParameterItems;
 
-            // Set initial placeholder states
             txtCategorySearch.Foreground = System.Windows.Media.Brushes.Gray;
             txtParameterSearch.Foreground = System.Windows.Media.Brushes.Gray;
             txtScheduleSearch.Foreground = System.Windows.Media.Brushes.Gray;
@@ -137,7 +136,6 @@ namespace ExcelLink.Forms
 
         #endregion
 
-        // ... (Progress Bar, Window Controls, Main Button Events methods are unchanged) ...
         #region Progress Bar Methods
 
         private void ProgressTimer_Tick(object sender, EventArgs e)
@@ -332,53 +330,77 @@ namespace ExcelLink.Forms
             var allParameterItems = new List<ParaExportParameterItem>();
             var processedParamNames = new HashSet<string>();
 
-            foreach (var schedule in selectedSchedules)
+            var allElements = selectedSchedules.SelectMany(s =>
+                new FilteredElementCollector(_doc, s.Id).WhereElementIsNotElementType().ToElements()
+            ).ToList();
+
+            var schedule = selectedSchedules.First();
+            var definition = schedule.Definition;
+
+            if (definition == null) return;
+
+            for (int i = 0; i < definition.GetFieldCount(); i++)
             {
-                var definition = schedule.Definition;
-                var sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
-                Element sampleTypeElement = null;
-                if (sampleElement != null)
+                var field = definition.GetField(i);
+                var paramName = field.GetName();
+
+                if (processedParamNames.Contains(paramName)) continue;
+                processedParamNames.Add(paramName);
+
+                var fieldInfo = _scheduleManager.GetScheduleFieldInfo(field, definition);
+                if (fieldInfo.IsCalculatedField || fieldInfo.IsCount)
                 {
-                    sampleTypeElement = _doc.GetElement(sampleElement.GetTypeId());
+                    allParameterItems.Add(new ParaExportParameterItem(paramName));
+                    continue;
                 }
 
-                for (int i = 0; i < definition.GetFieldCount(); i++)
+                if (!allElements.Any()) continue;
+
+                Parameter representativeParam = null;
+                bool isEverWritable = false;
+                bool isEverInstance = false;
+                bool isEverType = false;
+
+                foreach (var element in allElements)
                 {
-                    var field = definition.GetField(i);
-                    var paramName = field.GetName();
-
-                    if (processedParamNames.Contains(paramName)) continue;
-
-                    processedParamNames.Add(paramName);
-
-                    Parameter param = null;
-                    bool isType = false;
-                    bool isReadOnly = false;
-
-                    if (sampleElement != null)
-                    {
-                        param = _scheduleManager.GetParameterByField(sampleElement, field);
-                        if (param == null && sampleTypeElement != null)
-                        {
-                            param = _scheduleManager.GetParameterByField(sampleTypeElement, field);
-                            isType = true;
-                        }
-                    }
-
+                    Parameter param = _scheduleManager.GetParameterByField(element, field);
                     if (param != null)
                     {
-                        isReadOnly = param.IsReadOnly;
-                        allParameterItems.Add(new ParaExportParameterItem(param, isReadOnly, isType));
+                        if (representativeParam == null) representativeParam = param;
+                        isEverInstance = true;
+                        if (!param.IsReadOnly) isEverWritable = true;
                     }
                     else
                     {
-                        // Handle non-parameter fields like 'Count' or calculated fields
-                        allParameterItems.Add(new ParaExportParameterItem(paramName));
+                        Element typeElement = _doc.GetElement(element.GetTypeId());
+                        if (typeElement != null)
+                        {
+                            param = _scheduleManager.GetParameterByField(typeElement, field);
+                            if (param != null)
+                            {
+                                if (representativeParam == null) representativeParam = param;
+                                isEverType = true;
+                                if (!param.IsReadOnly) isEverWritable = true;
+                            }
+                        }
                     }
+                    if (isEverWritable && isEverInstance) break;
+                }
+
+                if (representativeParam != null)
+                {
+                    bool isReadOnly = !isEverWritable;
+                    bool isType = isEverType && !isEverInstance;
+
+                    if (fieldInfo.IsSharedParameter)
+                    {
+                        isReadOnly = false;
+                    }
+
+                    allParameterItems.Add(new ParaExportParameterItem(representativeParam, isReadOnly, isType, false));
                 }
             }
 
-            // Sort and update the UI collection
             var sortedItems = allParameterItems.OrderBy(p => p.ParameterName);
             foreach (var item in sortedItems)
             {
@@ -390,7 +412,6 @@ namespace ExcelLink.Forms
         private void txtScheduleSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
             var textBox = sender as System.Windows.Controls.TextBox;
-            // Only filter if the text is not the placeholder
             if (textBox != null && textBox.IsFocused && textBox.Text != "Search schedules...")
             {
                 string searchText = textBox.Text.ToLower();
@@ -423,7 +444,7 @@ namespace ExcelLink.Forms
         #endregion
 
         #region INotifyPropertyChanged
-        // ... (unchanged)
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged(string propertyName)
@@ -433,7 +454,7 @@ namespace ExcelLink.Forms
         #endregion
 
         #region Schedule Export/Import
-        // ... (unchanged)
+
         private void ExportSchedulesToExcel()
         {
             if (!SelectedSchedules.Any())
@@ -460,9 +481,6 @@ namespace ExcelLink.Forms
             List<SimpleScheduleData> scheduleData;
             try
             {
-                // =================================================================================
-                // MODIFICATION: Changed 'false' to 'true' to include header/column properties.
-                // =================================================================================
                 scheduleData = _scheduleManager.GetScheduleDataForExport(schedulesToExport, true);
             }
             catch (Exception ex)
@@ -674,7 +692,6 @@ namespace ExcelLink.Forms
             }
         }
 
-        // ... (The rest of the file is unchanged)
         private void ExportToExcel()
         {
             if (!SelectedCategoryNames.Any())
@@ -973,7 +990,7 @@ namespace ExcelLink.Forms
                     bool isTypeParam = isTypeParamMap.ContainsKey(paramName) ? isTypeParamMap[paramName] : false;
 
                     if (paramName == "Type" || paramName == "Family and Type" || paramName == "Family") isReadOnly = true;
-                    AvailableParameterItems.Add(new ParaExportParameterItem(parameterMap[paramName], isReadOnly, isTypeParam));
+                    AvailableParameterItems.Add(new ParaExportParameterItem(parameterMap[paramName], isReadOnly, isTypeParam, false));
                 }
             }
             txtParameterSearch.Text = "Search parameters...";
@@ -1407,11 +1424,14 @@ namespace ExcelLink.Forms
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-        public ParaExportParameterItem(Parameter parameter, bool isReadOnly, bool isTypeParam)
+        public ParaExportParameterItem(Parameter parameter, bool isReadOnly, bool isTypeParam, bool isCalculated)
         {
             Parameter = parameter;
             ParameterName = parameter.Definition.Name;
-            if (isReadOnly)
+
+            if (isCalculated)
+                ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80E6E6FA"));
+            else if (isReadOnly)
                 ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FF4747"));
             else if (isTypeParam)
                 ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FFE699"));
@@ -1419,13 +1439,11 @@ namespace ExcelLink.Forms
                 ParameterColor = new SolidColorBrush(Colors.White);
         }
 
-        // Constructor for non-parameter fields like "Count"
         public ParaExportParameterItem(string parameterName)
         {
             Parameter = null;
             ParameterName = parameterName;
-            // Treat as read-only
-            ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FF4747"));
+            ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80E6E6FA"));
         }
     }
 

@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Height="600" Width="920" MinWidth="920" MinHeight="600"
+        Height="600" Width="900" MinWidth="900" MinHeight="600"
         Background="#F5F5F5"
         WindowStyle="None"
         WindowStartupLocation="CenterScreen">
@@ -299,9 +299,9 @@
                                 <TextBlock Text="Color Legend:" FontWeight="Bold"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                                     <Border Width="20" Height="20" Background="#80FF4747" BorderBrush="Black" BorderThickness="1"/>
-                                    <TextBlock Text="Read-only Parameter" Margin="5,0,10,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Read-only" Margin="5,0,10,0" VerticalAlignment="Center"/>
                                     <Border Width="20" Height="20" Background="#80FFE699" BorderBrush="Black" BorderThickness="1"/>
-                                    <TextBlock Text="Type Parameter" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Type" Margin="5,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
