@@ -657,7 +657,9 @@ namespace ExcelLink.Common
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeBottom].Weight = Excel.XlBorderWeight.xlThick;
             entireTable.Borders[Excel.XlBordersIndex.xlEdgeRight].Weight = Excel.XlBorderWeight.xlThick;
 
-            colorLegendSheet.Columns.AutoFit();
+            ((Excel.Range)colorLegendSheet.Columns[2]).ColumnWidth = 15;
+            ((Excel.Range)colorLegendSheet.Columns[3]).AutoFit();
+            ((Excel.Range)colorLegendSheet.Columns[4]).AutoFit();
         }
     }
 

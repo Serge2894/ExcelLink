@@ -61,24 +61,82 @@ namespace ExcelLink.Common
                     return;
                 }
 
-                List<string> headers = new List<string>();
+                var headers = new List<(string Name, bool IsType)>();
                 int firstDataColumn = 2; // Skip the first column (Element ID)
 
-                // Parse headers - extract just the parameter name from multi-line headers
                 for (int j = firstDataColumn; j <= usedRange.Columns.Count; j++)
                 {
                     var headerCell = usedRange.Cells[1, j] as Excel.Range;
                     if (headerCell != null && headerCell.Value2 != null)
                     {
                         string fullHeader = headerCell.Value2.ToString();
-                        // Extract just the parameter name (first line)
-                        string paramName = fullHeader.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
-                        headers.Add(paramName);
+                        var headerLines = fullHeader.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                        string paramName = headerLines.Length > 0 ? headerLines[0].Trim() : string.Empty;
+                        bool isType = headerLines.Length > 1 && headerLines[1].Trim() == "(Type Parameter)";
+                        headers.Add((paramName, isType));
                     }
                 }
 
-                int totalRows = usedRange.Rows.Count - 1; // Exclude header row
+                var typeParamData = new Dictionary<Tuple<ElementId, string>, List<Tuple<string, string>>>();
+
+                // Pre-pass to gather all type parameter values
+                for (int i = 2; i <= usedRange.Rows.Count; i++)
+                {
+                    var idCell = usedRange.Cells[i, 1] as Excel.Range;
+                    if (idCell == null || idCell.Value2 == null) continue;
+                    string idString = idCell.Value2.ToString();
+                    if (!int.TryParse(idString, out int elementIdInt)) continue;
+
+                    ElementId elementId = new ElementId(elementIdInt);
+                    Element element = _doc.GetElement(elementId);
+
+                    if (element != null)
+                    {
+                        Element typeElem = _doc.GetElement(element.GetTypeId());
+                        if (typeElem != null)
+                        {
+                            for (int j = 0; j < headers.Count; j++)
+                            {
+                                var (paramName, isType) = headers[j];
+                                if (isType)
+                                {
+                                    var paramCell = usedRange.Cells[i, j + firstDataColumn] as Excel.Range;
+                                    if (paramCell != null && paramCell.Value2 != null)
+                                    {
+                                        string paramValue = paramCell.Value2.ToString();
+                                        var key = Tuple.Create(typeElem.Id, paramName);
+                                        if (!typeParamData.ContainsKey(key))
+                                        {
+                                            typeParamData[key] = new List<Tuple<string, string>>();
+                                        }
+                                        typeParamData[key].Add(Tuple.Create(paramValue, idString));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var inconsistentTypeParameters = new HashSet<Tuple<ElementId, string>>();
+                foreach (var kvp in typeParamData)
+                {
+                    var groups = kvp.Value.GroupBy(t => t.Item1).ToList();
+                    if (groups.Count > 1)
+                    {
+                        inconsistentTypeParameters.Add(kvp.Key);
+                        foreach (var group in groups)
+                        {
+                            foreach (var item in group)
+                            {
+                                ErrorMessages.Add(new ImportErrorItem { ElementId = item.Item2, Description = $"Inconsistent value '{item.Item1}' for type parameter '{kvp.Key.Item2}'. Type parameters with the same ID must be filled the same." });
+                            }
+                        }
+                    }
+                }
+
+                int totalRows = usedRange.Rows.Count - 1;
                 int processedRows = 0;
+                var updatedTypeParameters = new HashSet<Tuple<ElementId, string>>();
 
                 using (Transaction t = new Transaction(_doc, "Import Parameters from Excel"))
                 {
@@ -87,14 +145,11 @@ namespace ExcelLink.Common
                     for (int i = 2; i <= usedRange.Rows.Count; i++)
                     {
                         var idCell = usedRange.Cells[i, 1] as Excel.Range;
-
                         if (idCell == null || idCell.Value2 == null) continue;
-
                         string idString = idCell.Value2.ToString();
-
                         if (!int.TryParse(idString, out int elementIdInt))
                         {
-                            ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Invalid ElementId '{idString}'" });
+                            // Error already logged in pre-pass logic if needed
                             continue;
                         }
 
@@ -104,87 +159,82 @@ namespace ExcelLink.Common
                         if (element != null)
                         {
                             bool elementUpdated = false;
+                            Element typeElem = _doc.GetElement(element.GetTypeId());
 
                             for (int j = 0; j < headers.Count; j++)
                             {
-                                string paramName = headers[j];
+                                var (paramName, isType) = headers[j];
                                 var paramCell = usedRange.Cells[i, j + firstDataColumn] as Excel.Range;
 
-                                // Skip if cell is null or empty
                                 if (paramCell == null || paramCell.Value2 == null) continue;
-
                                 string paramValue = paramCell.Value2.ToString();
-
-                                // Skip if the cell has grey background (parameter doesn't exist)
                                 var cellColor = paramCell.Interior.Color;
                                 if (cellColor != null)
                                 {
                                     int colorValue = Convert.ToInt32(cellColor);
-                                    // Check if it's grey color (D3D3D3)
                                     if (colorValue == ColorTranslator.ToOle(ColorTranslator.FromHtml("#D3D3D3")))
-                                    {
                                         continue;
+                                }
+
+                                if (isType && typeElem != null)
+                                {
+                                    var key = Tuple.Create(typeElem.Id, paramName);
+                                    if (inconsistentTypeParameters.Contains(key))
+                                    {
+                                        continue; // Skip update for this inconsistent parameter
+                                    }
+
+                                    if (updatedTypeParameters.Contains(key))
+                                    {
+                                        continue; // Already updated this type parameter
                                     }
                                 }
 
-                                try
-                                {
-                                    Parameter param = element.LookupParameter(paramName);
-                                    Element targetElement = element;
+                                Parameter param = element.LookupParameter(paramName);
+                                Element targetElement = element;
 
-                                    if (param == null)
+                                if (param == null && typeElem != null)
+                                {
+                                    param = typeElem.LookupParameter(paramName);
+                                    targetElement = typeElem;
+                                }
+
+                                if (param == null)
+                                {
+                                    BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
+                                    if (bip != BuiltInParameter.INVALID)
                                     {
-                                        Element typeElem = _doc.GetElement(element.GetTypeId());
-                                        if (typeElem != null)
+                                        param = element.get_Parameter(bip);
+                                        targetElement = element;
+                                        if (param == null && typeElem != null)
                                         {
-                                            param = typeElem.LookupParameter(paramName);
+                                            param = typeElem.get_Parameter(bip);
                                             targetElement = typeElem;
                                         }
                                     }
-
-                                    if (param == null)
-                                    {
-                                        BuiltInParameter bip = Utils.GetBuiltInParameterByName(paramName);
-                                        if (bip != BuiltInParameter.INVALID)
-                                        {
-                                            param = element.get_Parameter(bip);
-                                            targetElement = element;
-
-                                            if (param == null)
-                                            {
-                                                Element typeElem = _doc.GetElement(element.GetTypeId());
-                                                if (typeElem != null)
-                                                {
-                                                    param = typeElem.get_Parameter(bip);
-                                                    targetElement = typeElem;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if (param != null && !param.IsReadOnly)
-                                    {
-                                        string currentValue = Utils.GetParameterValue(targetElement, paramName);
-
-                                        if (currentValue != paramValue)
-                                        {
-                                            bool success = Utils.SetParameterValue(targetElement, paramName, paramValue);
-                                            if (success)
-                                            {
-                                                elementUpdated = true;
-                                            }
-                                            else
-                                            {
-                                                ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}' with value '{paramValue}'" });
-                                            }
-                                        }
-                                    }
                                 }
-                                catch (Exception ex)
+
+                                if (param != null && !param.IsReadOnly)
                                 {
-                                    ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}': {ex.Message}" });
+                                    string currentValue = Utils.GetParameterValue(targetElement, paramName);
+                                    if (currentValue != paramValue)
+                                    {
+                                        if (Utils.SetParameterValue(targetElement, paramName, paramValue))
+                                        {
+                                            elementUpdated = true;
+                                            if (isType)
+                                            {
+                                                updatedTypeParameters.Add(Tuple.Create(typeElem.Id, paramName));
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ErrorMessages.Add(new ImportErrorItem { ElementId = idString, Description = $"Error updating parameter '{paramName}' with value '{paramValue}'" });
+                                        }
+                                    }
                                 }
                             }
+
                             if (elementUpdated)
                             {
                                 UpdatedElementsCount++;
@@ -215,7 +265,6 @@ namespace ExcelLink.Common
             }
             finally
             {
-                // Clean up Excel objects
                 if (worksheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(worksheet);
                 if (workbook != null)
                 {
