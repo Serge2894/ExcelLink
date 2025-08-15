@@ -108,94 +108,70 @@ namespace ExcelLink.Common
                 int numberOfRows = bodySection.NumberOfRows;
                 int numberOfColumns = visibleFields.Count > 0 ? visibleFields.Count : bodySection.NumberOfColumns;
 
-                if (numberOfColumns != bodySection.NumberOfColumns)
-                {
-                    numberOfColumns = bodySection.NumberOfColumns;
-                }
-
-                Element sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
-                Element sampleTypeElement = sampleElement != null ? _doc.GetElement(sampleElement.GetTypeId()) : null;
-
                 if (includeHeaders)
                 {
-                    for (int colIdx = 0; colIdx < numberOfColumns; colIdx++)
+                    Element sampleElement = new FilteredElementCollector(_doc, schedule.Id).FirstElement();
+                    Element sampleTypeElement = sampleElement != null ? _doc.GetElement(sampleElement.GetTypeId()) : null;
+
+                    for (int colIdx = 0; colIdx < visibleFields.Count; colIdx++)
                     {
-                        string headerText = schedule.GetCellText(SectionType.Header, 0, colIdx);
+                        var field = visibleFields[colIdx];
+                        string headerText = field.GetName();
                         simpleData.Headers.Add(headerText);
                         simpleData.ColumnLetters.Add(GetExcelColumnName(colIdx + 1));
 
-                        if (colIdx < visibleFields.Count)
+                        var fieldInfo = GetScheduleFieldInfo(field, definition);
+                        simpleData.FieldInfos.Add(fieldInfo);
+
+                        var colProp = new ColumnProperty
                         {
-                            var field = visibleFields[colIdx];
-                            var fieldInfo = GetScheduleFieldInfo(field, definition);
-                            simpleData.FieldInfos.Add(fieldInfo);
+                            IsReadOnly = true,
+                            IsType = false,
+                            IsCalculated = fieldInfo.IsCalculatedField || fieldInfo.IsCount,
+                            FieldType = fieldInfo.FieldType.ToString()
+                        };
 
-                            var colProp = new ColumnProperty
+                        if (!fieldInfo.IsCalculatedField && !fieldInfo.IsCount)
+                        {
+                            if (sampleElement != null)
                             {
-                                IsReadOnly = true,
-                                IsType = false,
-                                IsCalculated = fieldInfo.IsCalculatedField || fieldInfo.IsCount,
-                                FieldType = fieldInfo.FieldType.ToString()
-                            };
-
-                            // For non-calculated fields, check if it's a parameter
-                            if (!fieldInfo.IsCalculatedField && !fieldInfo.IsCount)
-                            {
-                                string paramName = field.GetName();
-
-                                if (sampleElement != null)
+                                Parameter param = GetParameterByField(sampleElement, field);
+                                if (param != null)
                                 {
-                                    Parameter param = GetParameterByField(sampleElement, field);
+                                    colProp.IsReadOnly = param.IsReadOnly;
+                                    colProp.IsType = false;
+                                }
+                                else if (sampleTypeElement != null)
+                                {
+                                    param = GetParameterByField(sampleTypeElement, field);
                                     if (param != null)
                                     {
                                         colProp.IsReadOnly = param.IsReadOnly;
-                                        colProp.IsType = false;
-                                    }
-                                    else if (sampleTypeElement != null)
-                                    {
-                                        param = GetParameterByField(sampleTypeElement, field);
-                                        if (param != null)
-                                        {
-                                            colProp.IsReadOnly = param.IsReadOnly;
-                                            colProp.IsType = true;
-                                        }
+                                        colProp.IsType = true;
                                     }
                                 }
                             }
-                            simpleData.ColumnProperties.Add(colProp);
                         }
-                        else
-                        {
-                            simpleData.ColumnProperties.Add(new ColumnProperty
-                            {
-                                IsReadOnly = true,
-                                IsType = false,
-                                IsCalculated = false,
-                                FieldType = "Unknown"
-                            });
-                            simpleData.FieldInfos.Add(new ScheduleFieldInfo
-                            {
-                                Name = headerText,
-                                IsCalculatedField = false,
-                                IsSharedParameter = false,
-                                IsCount = false
-                            });
-                        }
+                        simpleData.ColumnProperties.Add(colProp);
                     }
                 }
 
-                // Export body rows
-                for (int row = 0; row < numberOfRows; row++)
+                int bodyStartRow = 0;
+                if (definition.ShowHeaders && numberOfRows > 0)
+                {
+                    bodyStartRow = 1;
+                }
+
+                for (int row = bodyStartRow; row < numberOfRows; row++)
                 {
                     var rowData = new List<string>();
-                    for (int col = 0; col < numberOfColumns; col++)
+                    for (int col = 0; col < simpleData.Headers.Count; col++)
                     {
                         rowData.Add(schedule.GetCellText(SectionType.Body, row, col));
                     }
                     simpleData.BodyRows.Add(rowData);
                 }
 
-                // Process row types
                 foreach (var rowData in simpleData.BodyRows)
                 {
                     bool isBlank = rowData.All(string.IsNullOrWhiteSpace);
@@ -207,17 +183,7 @@ namespace ExcelLink.Common
                         continue;
                     }
 
-                    int nonEmptyCount = rowData.Count(c => !string.IsNullOrWhiteSpace(c));
-                    bool isHeaderOrFooter;
-
-                    if (numberOfColumns > 2)
-                    {
-                        isHeaderOrFooter = (nonEmptyCount > 0 && nonEmptyCount <= 2);
-                    }
-                    else
-                    {
-                        isHeaderOrFooter = (nonEmptyCount == 1);
-                    }
+                    bool isHeaderOrFooter = false;
                     simpleData.IsGroupHeaderOrFooterRow.Add(isHeaderOrFooter);
                 }
 
@@ -242,9 +208,6 @@ namespace ExcelLink.Common
             return allScheduleData;
         }
 
-        /// <summary>
-        /// Get detailed information about a schedule field
-        /// </summary>
         private ScheduleFieldInfo GetScheduleFieldInfo(ScheduleField field, ScheduleDefinition definition)
         {
             var fieldInfo = new ScheduleFieldInfo
@@ -257,23 +220,19 @@ namespace ExcelLink.Common
                 ParameterId = field.ParameterId
             };
 
-            // Check if it's a Count field
             if (field.FieldType == ScheduleFieldType.Count)
             {
                 fieldInfo.IsCount = true;
                 fieldInfo.IsCalculatedField = true;
             }
-            // Check if it's a calculated value field
             else if (field.IsCalculatedField)
             {
                 fieldInfo.IsCalculatedField = true;
             }
-            // Check if it's a shared parameter
             else if (field.ParameterId != null && field.ParameterId != ElementId.InvalidElementId)
             {
                 try
                 {
-                    // Try to get the shared parameter definition
                     SharedParameterElement sharedParam = _doc.GetElement(field.ParameterId) as SharedParameterElement;
                     if (sharedParam != null)
                     {
@@ -286,21 +245,15 @@ namespace ExcelLink.Common
             return fieldInfo;
         }
 
-        /// <summary>
-        /// Get parameter from element based on schedule field
-        /// </summary>
         public Parameter GetParameterByField(Element element, ScheduleField field)
         {
             if (element == null || field == null)
                 return null;
 
-            // First try to get by parameter ID if it exists
             if (field.ParameterId != null && field.ParameterId != ElementId.InvalidElementId)
             {
-                // Check if it's a built-in parameter
                 if (field.ParameterId.IntegerValue < 0)
                 {
-                    // It's a built-in parameter
                     BuiltInParameter builtInParam = (BuiltInParameter)field.ParameterId.IntegerValue;
                     Parameter param = element.get_Parameter(builtInParam);
                     if (param != null)
@@ -308,7 +261,6 @@ namespace ExcelLink.Common
                 }
                 else
                 {
-                    // It's a shared or project parameter - use the GUID-based approach
                     foreach (Parameter param in element.Parameters)
                     {
                         if (param.Id == field.ParameterId)
@@ -317,13 +269,11 @@ namespace ExcelLink.Common
                 }
             }
 
-            // Try to get by name
             string paramName = field.GetName();
             Parameter paramByName = element.LookupParameter(paramName);
             if (paramByName != null)
                 return paramByName;
 
-            // Try built-in parameters by name
             BuiltInParameter bipByName = Utils.GetBuiltInParameterByName(paramName);
             if (bipByName != BuiltInParameter.INVALID)
             {
@@ -382,7 +332,6 @@ namespace ExcelLink.Common
             int currentColCount = Math.Max(1, scheduleData.Headers.Any() ? scheduleData.Headers.Count : (scheduleData.BodyRows.FirstOrDefault()?.Count ?? 1));
             int startRow = 1;
 
-            // Title row
             Excel.Range titleRange = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
             titleRange.Merge();
             titleRange.Value2 = scheduleData.Name;
@@ -393,7 +342,6 @@ namespace ExcelLink.Common
             titleRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
             startRow++;
 
-            // Column index row
             Excel.Range indexRow = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
             indexRow.Font.Bold = true;
             indexRow.HorizontalAlignment = Excel.XlHAlign.xlHAlignCenter;
@@ -406,15 +354,22 @@ namespace ExcelLink.Common
             }
             startRow++;
 
-            // Headers with field information
             if (scheduleData.Headers.Any())
             {
+                Excel.Range headerRowRange = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
+                headerRowRange.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFC729"));
+                headerRowRange.Font.Bold = true;
+                headerRowRange.WrapText = true;
+                headerRowRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
+
                 for (int col = 0; col < scheduleData.Headers.Count; col++)
                 {
                     Excel.Range headerCell = (Excel.Range)worksheet.Cells[startRow, col + 1];
                     string headerText = scheduleData.Headers[col];
 
-                    // Add field type information to header
+                    // =================================================================================
+                    // MODIFICATION: The block adding "(Shared)" is removed.
+                    // =================================================================================
                     if (col < scheduleData.FieldInfos.Count)
                     {
                         var fieldInfo = scheduleData.FieldInfos[col];
@@ -426,33 +381,19 @@ namespace ExcelLink.Common
                         {
                             headerText += "\n(Calculated)";
                         }
-                        else if (fieldInfo.IsSharedParameter)
-                        {
-                            headerText += "\n(Shared)";
-                        }
                     }
 
                     headerCell.Value2 = headerText;
-                    headerCell.Font.Bold = true;
-                    headerCell.WrapText = true;
-                    headerCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-                    // Apply special color for calculated/count fields
                     if (col < scheduleData.ColumnProperties.Count && scheduleData.ColumnProperties[col].IsCalculated)
                     {
-                        headerCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#B19CD9")); // Light purple for calculated fields
+                        headerCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#B19CD9"));
                     }
                 }
-                ((Excel.Range)worksheet.Rows[startRow]).RowHeight = 35;
+                ((Excel.Range)worksheet.Rows[startRow]).RowHeight = 45;
                 startRow++;
             }
 
-            // Separator row
-            Excel.Range greyRowSeparator = worksheet.Range[worksheet.Cells[startRow, 1], worksheet.Cells[startRow, currentColCount]];
-            greyRowSeparator.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
-            startRow++;
-
-            // Body rows
             for (int row = 0; row < scheduleData.BodyRows.Count; row++)
             {
                 var currentRowData = scheduleData.BodyRows[row];
@@ -481,7 +422,6 @@ namespace ExcelLink.Common
                             var colProp = scheduleData.ColumnProperties[col];
                             if (colProp.IsCalculated)
                             {
-                                // Light purple for calculated/count fields
                                 dataCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#E6E6FA"));
                             }
                             else if (colProp.IsReadOnly)
@@ -497,12 +437,10 @@ namespace ExcelLink.Common
                 }
             }
 
-            // Add summary rows if present
             if (scheduleData.SummaryRows != null && scheduleData.SummaryRows.Any())
             {
                 int summaryStartRow = startRow + scheduleData.BodyRows.Count;
 
-                // Add separator before summary
                 Excel.Range summarySeparator = worksheet.Range[worksheet.Cells[summaryStartRow, 1], worksheet.Cells[summaryStartRow, currentColCount]];
                 summarySeparator.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#CCCCCC"));
                 summaryStartRow++;
@@ -515,7 +453,7 @@ namespace ExcelLink.Common
                         summaryCell.Value2 = summaryRow[col];
                         summaryCell.Font.Bold = true;
                         summaryCell.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
-                        summaryCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC")); // Cream color for summary
+                        summaryCell.Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFF8DC"));
                     }
                     summaryStartRow++;
                 }
@@ -544,7 +482,6 @@ namespace ExcelLink.Common
             return columnName;
         }
 
-        // Import methods remain largely the same, but with awareness of calculated fields
         public List<ImportErrorItem> ImportSchedulesFromExcel(string excelFilePath, Action<int> progressCallback)
         {
             List<ImportErrorItem> errors = new List<ImportErrorItem>();
@@ -604,7 +541,6 @@ namespace ExcelLink.Common
             List<ImportErrorItem> errors = new List<ImportErrorItem>();
             ScheduleDefinition definition = schedule.Definition;
 
-            // Get visible fields to understand which are editable
             var visibleFields = new List<ScheduleField>();
             var editableFieldIndices = new List<int>();
 
@@ -614,7 +550,6 @@ namespace ExcelLink.Common
                 if (!field.IsHidden)
                 {
                     visibleFields.Add(field);
-                    // Skip calculated fields and count fields during import
                     if (!field.IsCalculatedField && field.FieldType != ScheduleFieldType.Count)
                     {
                         editableFieldIndices.Add(visibleFields.Count - 1);
@@ -624,17 +559,15 @@ namespace ExcelLink.Common
 
             Excel.Range usedRange = worksheet.UsedRange;
             int excelRows = usedRange.Rows.Count;
-            int startRow = 5; // Skip title, index, header, and separator rows
+            int startRow = 4;
 
             for (int i = startRow; i <= excelRows; i++)
             {
                 try
                 {
-                    // Check if this is a special row (grey background)
                     var firstCell = usedRange.Cells[i, 1] as Excel.Range;
                     if (firstCell == null) continue;
 
-                    // Skip rows with grey background (separators, headers, footers)
                     var cellColor = firstCell.Interior.Color;
                     if (cellColor != null)
                     {
@@ -662,21 +595,18 @@ namespace ExcelLink.Common
 
                         var field = visibleFields[fieldIndex];
 
-                        // Skip calculated and count fields
                         if (field.IsCalculatedField || field.FieldType == ScheduleFieldType.Count)
                             continue;
 
-                        var dataCell = usedRange.Cells[i, col + 2] as Excel.Range; // +2 because first column is key
+                        var dataCell = usedRange.Cells[i, col + 2] as Excel.Range;
                         if (dataCell == null || dataCell.Value2 == null) continue;
 
                         string value = dataCell.Value2.ToString();
                         string paramName = field.GetName();
 
-                        // Try to update the parameter
                         bool success = UpdateElementParameter(element, field, value);
                         if (!success)
                         {
-                            // Try type parameter if instance failed
                             Element typeElement = _doc.GetElement(element.GetTypeId());
                             if (typeElement != null)
                             {
@@ -724,15 +654,13 @@ namespace ExcelLink.Common
             FilteredElementCollector collector = new FilteredElementCollector(_doc, schedule.Id);
             var elements = collector.ToElements();
 
-            // Try to find by element ID first
             if (int.TryParse(keyValue, out int elementId))
             {
                 Element element = _doc.GetElement(new ElementId(elementId));
-                if (element != null && elements.Contains(element))
+                if (element != null && elements.Any(e => e.Id == element.Id))
                     return element;
             }
 
-            // Try to match by the first field value (usually a key field like Mark or Name)
             if (visibleFields.Any())
             {
                 var firstField = visibleFields.First();
@@ -783,7 +711,6 @@ namespace ExcelLink.Common
             legendHeaderRange.Interior.Color = ColorTranslator.ToOle(System.Drawing.Color.LightGray);
             legendHeaderRange.Borders.LineStyle = Excel.XlLineStyle.xlContinuous;
 
-            // Existing color codes
             ((Excel.Range)colorLegendSheet.Cells[4, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#FFE699"));
             ((Excel.Range)colorLegendSheet.Cells[4, 3]).Value2 = "Type value";
             ((Excel.Range)colorLegendSheet.Cells[4, 4]).Value2 = "Type parameters with the same ID should be filled the same";
@@ -804,7 +731,6 @@ namespace ExcelLink.Common
             ((Excel.Range)colorLegendSheet.Cells[8, 3]).Value2 = "Separator / Index / Group Header or Blank Line";
             ((Excel.Range)colorLegendSheet.Cells[8, 4]).Value2 = "Indicates a separator, index row, or a schedule group header/footer/blank line";
 
-            // New color codes for schedule-specific fields
             ((Excel.Range)colorLegendSheet.Cells[9, 2]).Interior.Color = ColorTranslator.ToOle(ColorTranslator.FromHtml("#B19CD9"));
             ((Excel.Range)colorLegendSheet.Cells[9, 3]).Value2 = "Calculated Field Header";
             ((Excel.Range)colorLegendSheet.Cells[9, 4]).Value2 = "Header for calculated or count fields in schedules";

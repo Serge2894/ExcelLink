@@ -460,7 +460,10 @@ namespace ExcelLink.Forms
             List<SimpleScheduleData> scheduleData;
             try
             {
-                scheduleData = _scheduleManager.GetScheduleDataForExport(schedulesToExport, false);
+                // =================================================================================
+                // MODIFICATION: Changed 'false' to 'true' to include header/column properties.
+                // =================================================================================
+                scheduleData = _scheduleManager.GetScheduleDataForExport(schedulesToExport, true);
             }
             catch (Exception ex)
             {
