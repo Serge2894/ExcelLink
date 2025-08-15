@@ -358,11 +358,11 @@ namespace ExcelLink.Common
                 case StorageType.Integer:
                     return "Integer";
                 case StorageType.Double:
-                    return "Double";
+                    return "Decimal";
                 case StorageType.String:
-                    return "String";
+                    return "Text";
                 case StorageType.ElementId:
-                    return "ElementId";
+                    return "Unknown";
                 default:
                     return "Unknown";
             }
