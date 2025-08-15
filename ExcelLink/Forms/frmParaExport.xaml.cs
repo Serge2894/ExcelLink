@@ -334,70 +334,70 @@ namespace ExcelLink.Forms
                 new FilteredElementCollector(_doc, s.Id).WhereElementIsNotElementType().ToElements()
             ).ToList();
 
-            var schedule = selectedSchedules.First();
-            var definition = schedule.Definition;
-
-            if (definition == null) return;
-
-            for (int i = 0; i < definition.GetFieldCount(); i++)
+            foreach (var schedule in selectedSchedules)
             {
-                var field = definition.GetField(i);
-                var paramName = field.GetName();
+                var definition = schedule.Definition;
+                if (definition == null) continue;
 
-                if (processedParamNames.Contains(paramName)) continue;
-                processedParamNames.Add(paramName);
-
-                var fieldInfo = _scheduleManager.GetScheduleFieldInfo(field, definition);
-                if (fieldInfo.IsCalculatedField || fieldInfo.IsCount)
+                for (int i = 0; i < definition.GetFieldCount(); i++)
                 {
-                    allParameterItems.Add(new ParaExportParameterItem(paramName));
-                    continue;
-                }
+                    var field = definition.GetField(i);
+                    var paramName = field.GetName();
 
-                if (!allElements.Any()) continue;
+                    if (!processedParamNames.Add(paramName)) continue;
 
-                Parameter representativeParam = null;
-                bool isEverWritable = false;
-                bool isEverInstance = false;
-                bool isEverType = false;
-
-                foreach (var element in allElements)
-                {
-                    Parameter param = _scheduleManager.GetParameterByField(element, field);
-                    if (param != null)
+                    var fieldInfo = _scheduleManager.GetScheduleFieldInfo(field, definition);
+                    if (fieldInfo.IsCalculatedField || fieldInfo.IsCount)
                     {
-                        if (representativeParam == null) representativeParam = param;
-                        isEverInstance = true;
-                        if (!param.IsReadOnly) isEverWritable = true;
+                        allParameterItems.Add(new ParaExportParameterItem(paramName));
+                        continue;
                     }
-                    else
+
+                    Parameter representativeParam = null;
+                    bool isEverWritable = false;
+                    bool isEverInstance = false;
+                    bool isEverType = false;
+
+                    if (allElements.Any())
                     {
-                        Element typeElement = _doc.GetElement(element.GetTypeId());
-                        if (typeElement != null)
+                        foreach (var element in allElements)
                         {
-                            param = _scheduleManager.GetParameterByField(typeElement, field);
+                            Parameter param = _scheduleManager.GetParameterByField(element, field);
                             if (param != null)
                             {
                                 if (representativeParam == null) representativeParam = param;
-                                isEverType = true;
+                                isEverInstance = true;
                                 if (!param.IsReadOnly) isEverWritable = true;
                             }
+                            else
+                            {
+                                Element typeElement = _doc.GetElement(element.GetTypeId());
+                                if (typeElement != null)
+                                {
+                                    param = _scheduleManager.GetParameterByField(typeElement, field);
+                                    if (param != null)
+                                    {
+                                        if (representativeParam == null) representativeParam = param;
+                                        isEverType = true;
+                                        if (!param.IsReadOnly) isEverWritable = true;
+                                    }
+                                }
+                            }
+                            if (isEverWritable && isEverInstance) break;
                         }
                     }
-                    if (isEverWritable && isEverInstance) break;
-                }
 
-                if (representativeParam != null)
-                {
-                    bool isReadOnly = !isEverWritable;
-                    bool isType = isEverType && !isEverInstance;
-
-                    if (fieldInfo.IsSharedParameter)
+                    if (representativeParam != null)
                     {
-                        isReadOnly = false;
+                        bool isReadOnly = !isEverWritable;
+                        bool isType = isEverType && !isEverInstance;
+                        if (fieldInfo.IsSharedParameter) isReadOnly = false;
+                        allParameterItems.Add(new ParaExportParameterItem(representativeParam, isReadOnly, isType, false));
                     }
-
-                    allParameterItems.Add(new ParaExportParameterItem(representativeParam, isReadOnly, isType, false));
+                    else
+                    {
+                        allParameterItems.Add(new ParaExportParameterItem(paramName, false, false, false));
+                    }
                 }
             }
 
@@ -1428,6 +1428,21 @@ namespace ExcelLink.Forms
         {
             Parameter = parameter;
             ParameterName = parameter.Definition.Name;
+
+            if (isCalculated)
+                ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80E6E6FA"));
+            else if (isReadOnly)
+                ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FF4747"));
+            else if (isTypeParam)
+                ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80FFE699"));
+            else
+                ParameterColor = new SolidColorBrush(Colors.White);
+        }
+
+        public ParaExportParameterItem(string parameterName, bool isReadOnly, bool isTypeParam, bool isCalculated)
+        {
+            Parameter = null;
+            ParameterName = parameterName;
 
             if (isCalculated)
                 ParameterColor = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#80E6E6FA"));
